@@ -860,6 +860,196 @@ These mappings represent investigative classifications of the activity observed 
 
 ## Detection Opportunities
 
+The reconstructed intrusion exposed several opportunities to identify malicious activity before the attacker reached SYSTEM-level access and established multiple persistence mechanisms.
+
+The following detection opportunities focus on observable behaviors and event correlations rather than relying exclusively on file names or known indicators.
+
+### Suspicious Office Process Execution
+
+The initial attack involved Microsoft Word spawning `msdt.exe` and encoded PowerShell.
+
+**Potential detection logic:**
+- Detect Office applications launching diagnostic utilities or scripting interpreters.
+- Correlate `WINWORD.EXE` activity with subsequent PowerShell execution.
+- Alert on unusual parent-child process relationships involving document applications.
+- Investigate encoded PowerShell launched shortly after Office document execution.
+
+**Relevant telemetry:** Sysmon Event ID 1, process-creation logs, and command-line arguments.
+
+This would provide an opportunity to detect the intrusion near its initial execution stage.
+
+### Payload Retrieval and Startup Persistence
+
+The attacker retrieved `update.zip` and created `update.lnk` in the Windows Startup directory.
+
+**Potential detection logic:**
+- Monitor scripting interpreters retrieving external archives.
+- Detect new shortcut or executable files created in user Startup directories.
+- Correlate file creation with preceding suspicious Office or PowerShell execution.
+- Identify unexpected changes to logon persistence locations.
+
+**Relevant telemetry:** Sysmon Event IDs 1 and 11, file-creation records, and PowerShell activity.
+
+### Suspicious HTTP Command and Control
+
+The investigation identified HTTP communication involving `resolvecyber.xyz` and the `Nim httpclient/1.6.6` User-Agent.
+
+**Potential detection logic:**
+- Alert on unusual HTTP clients communicating with unrecognized external infrastructure.
+- Identify periodic outbound requests from unexpected processes.
+- Correlate suspicious network connections with known malicious process ancestry.
+- Hunt for repeated HTTP requests containing unusual encoded query parameters.
+
+**Relevant telemetry:** Sysmon Event ID 3, HTTP proxy logs, and packet-capture evidence.
+
+The User-Agent alone is not proof of compromise because it is client-controlled and can be spoofed.
+
+### Credential Exposure and Discovery
+
+The attacker discovered authentication material in `automation.ps1` and enumerated local services.
+
+**Potential detection logic:**
+- Identify suspicious processes searching script files for passwords or authentication variables.
+- Monitor access to files known to contain sensitive application credentials.
+- Correlate credential discovery with subsequent authentication or remote-access activity.
+- Detect service enumeration performed by processes associated with earlier malicious execution.
+
+**Relevant telemetry:** Process-creation records, command-line activity, PowerShell logging, and file-access auditing where configured.
+
+### Reverse SOCKS Tunneling
+
+Chisel was launched with reverse SOCKS parameters and an external destination.
+
+**Potential detection logic:**
+- Detect Chisel-related command-line patterns such as `R:socks`.
+- Alert on unauthorized tunneling utilities running from user-writable locations.
+- Correlate suspicious process execution with outbound connections to uncommon destinations.
+- Investigate tunneling processes spawned by previously identified attacker-controlled executables.
+
+**Relevant telemetry:** Sysmon Event IDs 1 and 3, DNS logs, and network-flow data.
+
+This detection should distinguish the attempt to establish a tunnel from verified successful use of that tunnel.
+
+### Privilege Escalation
+
+The investigation identified privilege enumeration followed by PrintSpoofer activity and SYSTEM-level execution.
+
+**Potential detection logic:**
+- Correlate `whoami /priv` with subsequent suspicious process execution.
+- Detect known PrintSpoofer-related executables or command patterns.
+- Identify unexpected transitions into SYSTEM-level execution.
+- Correlate privilege enumeration, exploit-tool execution, and identity-verification commands.
+
+**Relevant telemetry:** Sysmon Event ID 1, Windows process logs, and endpoint security telemetry.
+
+Privilege enumeration alone is not malicious; the sequence and execution context provide the stronger signal.
+
+### Local Account and Administrator Group Manipulation
+
+Windows Security events confirmed creation of `shion` and addition of that account to Administrators.
+
+**Potential detection logic:**
+- Alert on unexpected local account creation.
+- Correlate account creation with subsequent privileged-group membership changes.
+- Monitor password-reset or account-modification activity involving privileged accounts.
+- Prioritize account-management changes occurring shortly after confirmed malicious execution.
+
+**Relevant telemetry:** Windows Security Event IDs 4720, 4722, 4724, 4738, and 4732.
+
+A particularly useful correlation would identify a newly created local account that is added to Administrators within a short period.
+
+### Windows Service Persistence
+
+The attacker executed `sc.exe` commands requesting creation of automatically starting services referencing `final.exe`.
+
+**Potential detection logic:**
+- Monitor service-creation commands and newly installed Windows services.
+- Flag services whose executable paths point to user-writable or unusual directories.
+- Correlate service creation with earlier privilege escalation or suspicious process activity.
+- Investigate newly created automatically starting services outside approved deployment activity.
+
+**Relevant telemetry:** Sysmon Event ID 1, Windows System Event ID 7045 where available, and service-configuration auditing.
+
+The preserved evidence established service-creation attempts. Additional service-installation telemetry would be needed to confirm successful installation.
+
+---
+
+## Remediation Recommendations
+
+The following recommendations address the attack paths identified during the Tempest investigation. They represent defensive actions appropriate to the simulated compromise rather than remediation steps performed during the investigation.
+
+### Harden Document Execution
+
+- Keep Microsoft Office and Windows components updated.
+- Restrict unnecessary Office child-process execution using appropriate attack-surface-reduction controls.
+- Block or investigate unexpected diagnostic-tool execution from Office applications.
+- Use email filtering and attachment controls to reduce exposure to malicious documents.
+
+### Restrict Script and Payload Execution
+
+- Apply application-control policies where operationally feasible.
+- Restrict unapproved executables from user-writable directories.
+- Monitor suspicious PowerShell activity and enable appropriate script-logging capabilities.
+- Review and control the use of legitimate Windows utilities for external downloads.
+
+### Protect Persistence Locations
+
+- Monitor user and system Startup folders for unexpected changes.
+- Review newly created shortcuts, scheduled tasks, services, and autorun configurations.
+- Restrict unnecessary privileges that allow users or applications to create persistent execution mechanisms.
+- Investigate persistence changes associated with suspicious process chains.
+
+### Reduce Command-and-Control Opportunities
+
+- Restrict unnecessary outbound connectivity.
+- Use DNS and web filtering to block identified malicious infrastructure.
+- Monitor unusual HTTP clients and connections to unrecognized destinations.
+- Detect unauthorized tunneling tools and suspicious reverse-proxy configurations.
+
+Blocking individual domains is useful for containment, but behavioral monitoring is necessary because attacker infrastructure can change.
+
+### Protect Credentials and Authentication Material
+
+The discovery of plaintext credential material in `automation.ps1` demonstrated a preventable credential-exposure risk.
+
+Recommended controls include:
+
+- Remove hardcoded passwords from scripts.
+- Store application secrets in approved secret-management systems.
+- Rotate credentials exposed during a suspected compromise.
+- Restrict access to scripts and configuration files containing authentication material.
+- Review the privileges granted to automation and service accounts.
+
+### Reduce Privilege-Escalation Risk
+
+- Keep Windows systems patched against known local privilege-escalation vulnerabilities.
+- Review which accounts and services require `SeImpersonatePrivilege`.
+- Restrict unnecessary local administrative access.
+- Monitor suspicious privilege enumeration and privilege-escalation tooling.
+- Use endpoint protection capable of identifying exploit-related process behavior.
+
+### Review Unauthorized Accounts and Services
+
+Following a confirmed compromise, the incident-response team should:
+
+1. Identify accounts created or modified during the intrusion.
+2. Disable or remove unauthorized accounts after preserving necessary forensic evidence.
+3. Review privileged-group membership.
+4. Reset potentially compromised credentials.
+5. Investigate suspicious service configurations and remove confirmed malicious persistence after evidence preservation.
+6. Verify that persistence mechanisms have not been re-established.
+
+### Validate Recovery and Improve Monitoring
+
+Recovery should include more than terminating the original malicious processes.
+
+The affected endpoint should be examined for additional persistence, compromised credentials, suspicious services, and unauthorized accounts.
+
+If the integrity of the system cannot be established with sufficient confidence, rebuilding from a trusted image may be preferable to relying on partial cleanup.
+
+Centralizing Sysmon, Windows Security, PowerShell, and network telemetry would also support earlier detection and faster correlation of similar activity.
+
+
 ## Remediation Recommendations
 
 ## Evidence Limitations
