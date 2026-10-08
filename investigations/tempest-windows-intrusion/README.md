@@ -239,6 +239,10 @@ The surrounding attack sequence established that the endpoint had already execut
 
 The investigation distinguished between the earlier payload-delivery infrastructure and the infrastructure observed during subsequent C2 activity.
 
+![Repeated outbound connections in Sysmon](evidence/05-sysmon-c2-connections.png)
+
+*Figure 5 — Sysmon network telemetry showing repeated outbound connections to `167.71.222.162` from the same process context.*
+
 ### HTTP Communication
 
 The packet capture contained HTTP activity associated with the compromised endpoint.
@@ -262,6 +266,10 @@ C2-related activity
 The HTTP evidence was examined alongside endpoint artifacts to determine how the network activity fit into the broader attack sequence.
 
 Where request or response content was available, it provided additional context about the activity. Network connections alone were not treated as proof of the exact commands executed on the endpoint.
+
+![HTTP command-and-control traffic in Brim](evidence/06-http-c2-traffic.png)
+
+*Figure 6 — Brim analysis showing repeated HTTP GET requests to `resolvecyber.xyz`, including variable query-string content and the `Nim httpclient/1.6.6` User-Agent.*
 
 ### User-Agent Analysis
 
