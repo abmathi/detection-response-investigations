@@ -109,6 +109,10 @@ The sections below examine each stage using the preserved endpoint and network e
 
 ### Malicious Document
 
+![Malicious Word document execution](evidence/01-malicious-document-execution.png)
+
+*Figure 1 — Sysmon process evidence showing Microsoft Word opening the malicious `free_magicules.doc` document.*
+
 The investigation began with a malicious Microsoft Word document associated with the initial compromise.
 
 Endpoint telemetry showed Microsoft Word launching a suspicious child-process chain rather than behaving like a normal document-viewing session.
@@ -132,6 +136,10 @@ The significance came from their appearance directly beneath the document proces
 This provided the first strong evidence that opening the document resulted in attacker-controlled code execution on the endpoint.
 
 ### MSDT and Encoded PowerShell
+
+![MSDT and encoded PowerShell execution](evidence/02-msdt-encoded-powershell.png)
+
+*Figure 2 — Sysmon command-line evidence showing `msdt.exe` invoked with PCWDiagnostic parameters and an embedded encoded PowerShell expression.*
 
 The process chain showed abuse of `msdt.exe`, followed by PowerShell containing encoded command content.
 
@@ -159,29 +167,23 @@ The investigation therefore treated the Word process tree as a connected executi
 
 ### Payload Delivery
 
-Following initial execution, the attacker retrieved an additional payload using built-in Windows tooling.
+![PowerShell payload download](evidence/03-powershell-payload-download.png)
 
-Evidence showed `certutil.exe` being used to obtain a file later associated with continued attacker activity.
+*Figure 3 — Decoded PowerShell showing retrieval and extraction of `update.zip` from attacker-controlled infrastructure into the Windows Startup directory.*
 
-This represented a transition from the initial document-triggered execution into a second stage of the compromise.
+Decoding the PowerShell command revealed a download-and-extraction sequence targeting phishteam.xyz.
 
-The observed progression was consistent with:
+The command retrieved update.zip, extracted its contents into the user's Windows Startup directory, and removed the downloaded archive.
 
-```text
-Initial PowerShell execution
-        ↓
-certutil.exe
-        ↓
-Remote payload retrieval
-        ↓
-Local executable
-```
+Sysmon file-creation evidence subsequently identified update.lnk in that location.
 
-Because `certutil.exe` is a legitimate Windows utility, its presence alone was not treated as malicious.
-
-Its significance came from the surrounding execution chain, the remote retrieval behavior, and the role of the downloaded file in subsequent attacker activity.
+This connected the initial document execution to the installation of the persistence mechanism.
 
 ### Startup Persistence
+
+![Windows Startup persistence](evidence/04-startup-persistence.png)
+
+*Figure 4 — Sysmon Event ID 11 recording creation of `update.lnk` in the user's Startup folder.*
 
 The attacker established persistence by placing attacker-controlled content within a Windows Startup location.
 
