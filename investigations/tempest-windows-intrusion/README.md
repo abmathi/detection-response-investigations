@@ -463,9 +463,28 @@ Windows process telemetry showed execution of the following command:
 
 This command enumerates the privileges assigned to the current process security token.
 
+![Windows privilege enumeration](evidence/11-privilege-enumeration.png)
+
+*Figure 11 — Process-creation evidence showing PowerShell invoking `whoami /priv` to enumerate the current security token's privileges.*
+
 The output identified `SeImpersonatePrivilege`, a Windows privilege that allows a process to impersonate another security context under applicable conditions.
 
 While this privilege can be present during legitimate Windows operations, it can also be abused by local privilege-escalation techniques.
+
+Subsequent process evidence identified the retrieval and execution
+of `spf.exe`, which was identified during the investigation as
+PrintSpoofer.
+
+The observed execution included:
+
+`spf.exe -c C:\ProgramData\final.exe`
+
+This linked privilege enumeration to the launch of the next
+attacker-controlled payload.
+
+![PrintSpoofer privilege escalation](evidence/12-printspoofer-execution.png)
+
+*Figure 12 — Process evidence showing the retrieval of `spf.exe` and its execution with `final.exe`, followed by additional identity-verification activity.*
 
 In the context of the ongoing intrusion, the enumeration was significant because it preceded subsequent activity associated with elevated execution.
 
@@ -476,6 +495,18 @@ The evidence established that the attacker investigated the available privileges
 Subsequent attacker activity indicated that execution had progressed to the Windows `NT AUTHORITY\SYSTEM` security context.
 
 SYSTEM is a highly privileged local Windows security identity used by operating-system services and components.
+
+Decoded command-output evidence contained the result:
+
+`nt authority\system`
+
+This supported the assessment that attacker-controlled execution
+had reached the SYSTEM security context following the PrintSpoofer
+activity.
+
+![SYSTEM-level identity confirmation](evidence/13-system-access-confirmation.png)
+
+*Figure 13 — Decoded command output reporting `nt authority\system`, supporting successful privilege escalation to the SYSTEM security context.*
 
 Attacker-controlled execution at this level can provide broad access to local resources and support additional persistence or security-control tampering.
 
