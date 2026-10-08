@@ -549,6 +549,14 @@ Windows Security telemetry recorded the creation of two local user accounts:
 
 Event ID `4720` provided evidence of new account creation.
 
+![Local account creation event](evidence/15-local-account-creation.png)
+
+*Figure 15 — Windows Security Event ID 4720 confirming creation of the local account `shion`, with the action recorded under the SYSTEM security context.*
+
+Although process evidence showed commands targeting both `shion` and `shuna`, the preserved Event ID 4720 screenshot specifically confirms the creation of `shion`.
+
+The commands involving `shuna` are documented separately as account-manipulation activity. The available screenshot does not independently establish every resulting account state.
+
 Additional account-management events were examined to understand the changes made after these accounts were introduced.
 
 Relevant events included:
@@ -578,33 +586,58 @@ This form of persistence is particularly significant because it may remain avail
 
 However, creation of an account and membership in Administrators do not independently prove a subsequent successful login using that account.
 
+![Administrator group membership change](evidence/16-administrator-group-membership.png)
+
+*Figure 16 — Windows Security Event ID 4732 confirming that the local account `shion` was added to the built-in Administrators group.*
+
 ### Additional Persistent Access
 
-The preserved investigation also identified additional attacker-controlled executable activity following SYSTEM-level access, including `spf.exe` and `final.exe` during the privilege-escalation sequence.
+Further process-creation evidence revealed that the attacker used Windows Service Control (`sc.exe`) to create additional persistence mechanisms.
 
-These artifacts were reviewed alongside the account-management events to understand the attacker's efforts to retain control of the endpoint.
+The observed commands included:
 
-The confirmed Startup-folder artifact represented one persistence mechanism. The creation of additional accounts and privileged group membership represented another.
+```text
+sc.exe \\TEMPEST create TempestUpdate binpath= C:\ProgramData\final.exe start= auto
 
-The investigation therefore distinguished between:
+sc.exe \\TEMPEST create TempestUpdate2 binpath= C:\ProgramData\final.exe start= auto
+```
 
-- **Execution:** attacker-controlled code running on the endpoint.
-- **Privilege escalation:** obtaining execution in a more privileged security context.
-- **Persistence:** establishing mechanisms that could allow access or execution to continue after the original intrusion path was interrupted.
+Both commands specified the same executable:
 
-Not every post-escalation executable was treated as an independently established persistence mechanism without evidence of an autostart configuration, service installation, scheduled task, or other durable access method.
+`C:\ProgramData\final.exe`
+
+The `start= auto` parameter requested automatic service startup, allowing the payload to be launched when Windows starts if the service creation succeeded and the service remained enabled.
+
+![Windows service persistence commands](evidence/17-windows-service-persistence.png)
+
+*Figure 17 — Process-creation evidence showing `sc.exe` commands configured to create two automatically starting services referencing `final.exe`.*
+
+This activity represented an additional persistence attempt distinct from the previously identified Startup-folder shortcut and privileged local accounts.
+
+The preserved screenshot confirms execution of the service-creation commands, but does not independently confirm both services were successfully installed and started.
+
+### Account-Manipulation Command Sequence
+
+Additional process evidence showed the attacker using `net.exe` to create and modify local accounts, enumerate users, and change privileged account credentials.
+
+![Windows account manipulation activity](evidence/14-account-manipulation-commands.png)
+
+*Figure 14 — Process evidence showing account creation, password modification, local Administrators group changes, and service-creation commands during post-escalation activity. Plaintext passwords have been redacted.*
+
+These commands provide context for the Windows Security account-management events and demonstrate that the attacker was attempting multiple methods of maintaining administrative access.
 
 ### Persistence Findings
 
-The account-management investigation supported the following conclusions:
+The account-management and service investigation supported the following conclusions:
 
-1. Two local accounts, `shion` and `shuna`, were created during the intrusion.
-2. Additional Windows Security events recorded account enablement, password-reset activity, and account-property modifications.
-3. Event ID `4732` provided evidence of an account being added to the local Administrators group.
-4. These account changes provided potential persistent access independent of the earlier Startup-folder mechanism.
-5. The available events support account creation and privilege assignment, but do not automatically establish subsequent successful authentication with those accounts.
+1. Process evidence showed commands creating and modifying the local accounts `shion` and `shuna`.
+2. Windows Security Event ID `4720` independently confirmed creation of `shion`.
+3. Event ID `4732` confirmed that `shion` was added to the built-in Administrators group.
+4. Additional commands attempted to modify local account passwords, including the built-in Administrator account.
+5. `sc.exe` was used to request creation of two automatically starting Windows services, `TempestUpdate` and `TempestUpdate2`, both referencing `C:\ProgramData\final.exe`.
+6. The observed account and service activity provided additional persistence opportunities independent of the earlier Startup-folder mechanism.
 
-Together with the earlier Startup persistence, these findings demonstrated that the attacker established multiple potential paths for maintaining access to the compromised endpoint.
+Together, these findings identified three distinct approaches to maintaining access during the intrusion: Startup-folder persistence, privileged local accounts, and attempted automatic Windows service installation.
 
 ## Attack Timeline
 
