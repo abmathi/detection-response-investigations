@@ -534,9 +534,77 @@ This stage was significant because SYSTEM-level access expanded the potential im
 
 ## Persistence and Account Manipulation
 
+Following privilege escalation to `NT AUTHORITY\SYSTEM`, the investigation identified additional activity intended to maintain access to the compromised Windows endpoint.
+
+Windows Security events and process evidence were used to examine local account creation, modifications to account properties, privileged group membership, and additional persistence-related activity.
+
+Unlike the earlier Startup-folder persistence mechanism, these actions established alternative means of accessing or controlling the system after the initial compromise.
+
 ### Local Account Creation
+
+Windows Security telemetry recorded the creation of two local user accounts:
+
+- `shion`
+- `shuna`
+
+Event ID `4720` provided evidence of new account creation.
+
+Additional account-management events were examined to understand the changes made after these accounts were introduced.
+
+Relevant events included:
+
+| Event ID | Description | Investigative Value |
+| --- | --- | --- |
+| `4720` | User account created | Establishes the creation of a new account |
+| `4722` | User account enabled | Indicates that an account was enabled |
+| `4724` | Password reset attempted | Indicates password-reset activity, with the event's recorded outcome requiring review |
+| `4738` | User account changed | Provides evidence of account-property modifications |
+
+These events were analyzed as a related sequence rather than isolated administrative operations.
+
+Within the context of the confirmed intrusion, the creation and modification of previously unrecognized accounts was consistent with establishing additional persistent access.
+
 ### Administrator Group Membership
+
+The investigation also identified account activity involving the local Administrators group.
+
+Windows Security Event ID `4732` recorded a member being added to a security-enabled local group.
+
+The event details were examined to determine the affected group and the account receiving membership.
+
+Adding an attacker-controlled account to the Administrators group provides a potential route to continued privileged access through normal Windows authentication mechanisms.
+
+This form of persistence is particularly significant because it may remain available even after the original malicious document, downloaded payload, or reverse shell has been removed.
+
+However, creation of an account and membership in Administrators do not independently prove a subsequent successful login using that account.
+
 ### Additional Persistent Access
+
+The preserved investigation also identified additional attacker-controlled executable activity following SYSTEM-level access, including `spf.exe` and `final.exe` during the privilege-escalation sequence.
+
+These artifacts were reviewed alongside the account-management events to understand the attacker's efforts to retain control of the endpoint.
+
+The confirmed Startup-folder artifact represented one persistence mechanism. The creation of additional accounts and privileged group membership represented another.
+
+The investigation therefore distinguished between:
+
+- **Execution:** attacker-controlled code running on the endpoint.
+- **Privilege escalation:** obtaining execution in a more privileged security context.
+- **Persistence:** establishing mechanisms that could allow access or execution to continue after the original intrusion path was interrupted.
+
+Not every post-escalation executable was treated as an independently established persistence mechanism without evidence of an autostart configuration, service installation, scheduled task, or other durable access method.
+
+### Persistence Findings
+
+The account-management investigation supported the following conclusions:
+
+1. Two local accounts, `shion` and `shuna`, were created during the intrusion.
+2. Additional Windows Security events recorded account enablement, password-reset activity, and account-property modifications.
+3. Event ID `4732` provided evidence of an account being added to the local Administrators group.
+4. These account changes provided potential persistent access independent of the earlier Startup-folder mechanism.
+5. The available events support account creation and privilege assignment, but do not automatically establish subsequent successful authentication with those accounts.
+
+Together with the earlier Startup persistence, these findings demonstrated that the attacker established multiple potential paths for maintaining access to the compromised endpoint.
 
 ## Attack Timeline
 
