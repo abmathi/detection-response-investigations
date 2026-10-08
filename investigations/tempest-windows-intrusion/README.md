@@ -641,6 +641,56 @@ Together, these findings identified three distinct approaches to maintaining acc
 
 ## Attack Timeline
 
+The investigation reconstructed a multi-stage Windows intrusion by correlating Sysmon events, Windows Security logs, decoded command-and-control content, and network traffic.
+
+The timeline below presents the observed attack progression in investigative order. It is a sequence of activity rather than a timestamp-accurate chronology; exact event times are not included where they could not be reliably established from the preserved evidence.
+
+| Phase | Observed Activity | Supporting Evidence |
+| --- | --- | --- |
+| Initial Execution | Malicious Word document `free_magicules.doc` opened and initiated suspicious child-process activity | Sysmon process events |
+| Exploitation | `WINWORD.EXE` launched `msdt.exe` using PCWDiagnostic parameters and encoded PowerShell | Process creation and command-line telemetry |
+| Payload Delivery | PowerShell retrieved and extracted `update.zip` from `phishteam.xyz` | Decoded PowerShell command |
+| Initial Persistence | `update.lnk` was created in the Windows Startup directory | Sysmon Event ID 11 |
+| Command and Control | Repeated outbound connections and HTTP requests associated with `resolvecyber.xyz` | Sysmon network events and PCAP |
+| C2 Identification | HTTP traffic contained the `Nim httpclient/1.6.6` User-Agent | Brim HTTP analysis |
+| Command Execution | Decoded HTTP content revealed a `whoami` command and account-related activity | HTTP-stream analysis |
+| Credential Discovery | Credential configuration was discovered in `automation.ps1` | PowerShell command output |
+| Service Discovery | The attacker enumerated TCP listening ports using `netstat -ano -p tcp` | Process and command-output evidence |
+| Tunneling | `ch.exe` launched with `client 167.71.199.191:8080 R:socks` | Sysmon process-creation evidence |
+| Privilege Enumeration | `whoami /priv` was executed to inspect available Windows privileges | Process creation |
+| Privilege Escalation | `spf.exe` (PrintSpoofer) was executed with `final.exe` | Process-creation evidence |
+| SYSTEM Access | Decoded command output reported `nt authority\system` | Captured and decoded command output |
+| Account Manipulation | `net.exe` commands attempted account creation and password changes | Process-creation evidence |
+| Account Creation | Windows Security Event ID 4720 confirmed creation of `shion` | Windows Security logs |
+| Privileged Membership | Event ID 4732 confirmed that `shion` was added to Administrators | Windows Security logs |
+| Additional Persistence | `sc.exe` commands requested creation of automatically starting `TempestUpdate` and `TempestUpdate2` services | Process-creation evidence |
+
+### Attack Progression
+
+The attack developed through several connected phases:
+
+**Initial compromise:** A malicious Word document triggered execution through `msdt.exe` and encoded PowerShell.
+
+**Establishing access:** A second-stage payload was retrieved, Startup persistence was configured, and suspicious HTTP communication followed.
+
+**Post-compromise discovery:** The attacker issued commands through the C2 channel, investigated credentials, and enumerated available network services.
+
+**Expanding control:** Chisel was used to initiate a reverse SOCKS tunnel, followed by privilege enumeration and PrintSpoofer execution.
+
+**Privileged persistence:** SYSTEM-level activity was followed by account manipulation, confirmed Administrator-group membership, and attempted installation of automatically starting Windows services.
+
+### Analytical Notes
+
+Several distinctions were maintained during timeline reconstruction:
+
+- A network connection did not automatically establish successful command execution.
+- A file-creation event did not independently prove that the file executed.
+- Privilege enumeration did not, by itself, establish privilege escalation.
+- Process evidence showing service-creation commands did not independently confirm successful service installation.
+- Windows Security events were used to validate account-management outcomes where available.
+
+These distinctions ensured that the timeline represented what the preserved evidence could establish rather than assuming every attacker command succeeded.
+
 ## Key Findings
 
 ## Investigation Indicators
