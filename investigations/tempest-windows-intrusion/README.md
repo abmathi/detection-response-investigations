@@ -1050,8 +1050,80 @@ If the integrity of the system cannot be established with sufficient confidence,
 Centralizing Sysmon, Windows Security, PowerShell, and network telemetry would also support earlier detection and faster correlation of similar activity.
 
 
-## Remediation Recommendations
-
 ## Evidence Limitations
 
+This investigation was reconstructed from preserved Sysmon events, Windows Security logs, decoded command content, and network packet captures collected within a simulated incident-response environment.
+
+Although these sources provided substantial visibility into the intrusion, they did not establish every attacker action or outcome with equal certainty.
+
+The investigation distinguishes between **directly observed events**, **correlated findings**, and **conclusions requiring additional evidence**.
+
+### Initial Execution and Persistence
+
+Process telemetry established the suspicious Word-to-MSDT execution chain, while decoded PowerShell revealed the second-stage payload retrieval.
+
+Sysmon Event ID 11 confirmed creation of `update.lnk` in the Windows Startup directory. However, the file-creation event alone did not establish that the shortcut subsequently executed during a user logon.
+
+### Command and Control
+
+Network evidence identified repeated HTTP communication associated with `resolvecyber.xyz` and the `Nim httpclient/1.6.6` User-Agent.
+
+Decoded HTTP content exposed attacker command activity, but not every request or response was independently tied to a corresponding endpoint process event.
+
+The identified infrastructure and communication pattern supported the C2 assessment without proving every command's execution or outcome.
+
+### Reconnaissance and Credential Discovery
+
+Command evidence showed local service enumeration and discovery of credentials embedded in `automation.ps1`.
+
+The credential material was exposed in the preserved script output, but the investigation did not independently establish every subsequent use of those credentials.
+
+### Reverse SOCKS Tunneling
+
+Sysmon confirmed that `ch.exe` executed with Chisel reverse SOCKS parameters.
+
+The available process evidence did not independently verify that the tunnel was successfully established or that specific internal connections were routed through it.
+
+### Privilege Escalation
+
+Process telemetry showed privilege enumeration and PrintSpoofer execution. Decoded command output subsequently reported `nt authority\system`.
+
+Together, these artifacts supported the assessment that attacker-controlled execution reached the SYSTEM security context.
+
+However, the precise privilege-escalation mechanism was not fully reconstructed from low-level exploit telemetry.
+
+### Account and Service Persistence
+
+Windows Security Event IDs 4720 and 4732 confirmed creation of `shion` and its addition to the built-in Administrators group.
+
+Additional process evidence showed account-management commands involving `shuna`, but the preserved screenshots did not independently confirm every resulting account state.
+
+Similarly, `sc.exe` commands requested creation of `TempestUpdate` and `TempestUpdate2` with automatic startup. The available evidence did not independently confirm successful installation, startup, or subsequent execution of those services.
+
+### Analytical Standard
+
+Throughout the investigation, observed commands were not automatically treated as successful actions.
+
+Where evidence confirmed an attempted technique but not its outcome, that distinction was preserved. Conclusions were limited to the artifacts available rather than assumptions about what the attacker intended or achieved.
+
+---
+
 ## Skills Demonstrated
+
+**Digital Forensics and Incident Response**  
+Intrusion reconstruction · attack sequencing · cross-source correlation · evidence validation · forensic reporting
+
+**Windows Endpoint Investigation**  
+Sysmon · Windows Security events · process trees · command-line analysis · file-creation analysis · account-management auditing
+
+**Network and C2 Analysis**  
+Wireshark · Brim · HTTP traffic analysis · User-Agent analysis · command decoding · network IOC identification
+
+**Threat Investigation**  
+Malicious document execution · PowerShell abuse · credential discovery · Chisel tunneling · PrintSpoofer activity · privilege escalation
+
+**Persistence Analysis**  
+Windows Startup folders · local account creation · privileged group membership · Windows service-creation attempts
+
+**Detection and Response**  
+MITRE ATT&CK mapping · behavioral detection opportunities · incident timeline reconstruction · remediation planning · evidence-scoped conclusions
