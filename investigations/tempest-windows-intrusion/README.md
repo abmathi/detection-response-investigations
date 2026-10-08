@@ -376,8 +376,61 @@ These observations helped bridge the earlier command-and-control activity with t
 
 ## Tunneling and Remote Access
 
+Following command-and-control activity and internal reconnaissance, the investigation identified tooling associated with network tunneling.
+
+The attacker used Chisel, a legitimate TCP tunneling utility that supports encrypted connections and reverse SOCKS proxying. In the context of this intrusion, Chisel provided a mechanism for extending network access through the compromised Windows endpoint.
+
 ### Chisel Reverse SOCKS Proxy
+
+Forensic evidence identified a Chisel client executing on the compromised system.
+
+The observed command configuration established a reverse connection to attacker-controlled infrastructure, using Chisel's reverse SOCKS functionality.
+
+The relevant activity can be summarized as:
+
+```text
+Compromised Windows endpoint
+        ↓
+Chisel client execution
+        ↓
+Outbound connection to Chisel server
+        ↓
+Reverse SOCKS proxy
+        ↓
+Potential access to internal network resources
+```
+
+A reverse SOCKS proxy differs from a conventional inbound connection because the compromised system initiates the connection outward.
+
+This can allow an attacker to route traffic through the compromised system without requiring the attacker to establish a new direct inbound connection through the target's network perimeter.
+
+The use of Chisel was significant because the attacker had already enumerated listening services and investigated the internal environment.
+
+Together, these activities were consistent with preparation for additional remote access and network movement.
+
 ### Remote Authentication Activity
+
+The investigation also identified remote authentication activity associated with the later stages of the intrusion.
+
+This activity was analyzed alongside the tunneling evidence to understand how the attacker attempted to extend access beyond the initial endpoint.
+
+The observed use of tunneling and authentication mechanisms demonstrated a transition from endpoint control toward broader access within the environment.
+
+Importantly, the presence of a reverse SOCKS tunnel does not independently prove that a particular internal connection was successfully routed through it.
+
+Establishing that relationship would require supporting network-flow, authentication, or process evidence connecting the tunnel to a specific remote session.
+
+### Investigation Findings
+
+The tunneling investigation supported the following conclusions:
+
+1. Chisel was identified among the attacker-associated tooling.
+2. Command-line evidence showed configuration consistent with reverse SOCKS tunneling.
+3. The activity occurred after C2 establishment and reconnaissance.
+4. The reverse tunnel provided a potential pathway for accessing additional internal resources.
+5. The available evidence should be used to distinguish tunnel establishment from confirmed use of the tunnel for specific lateral-movement actions.
+
+This stage demonstrated how a compromised endpoint can become an intermediary for additional network access, making outbound tunneling activity an important detection opportunity during incident response.
 
 ## Privilege Escalation
 
