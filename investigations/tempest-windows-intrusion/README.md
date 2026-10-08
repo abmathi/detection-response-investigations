@@ -221,9 +221,76 @@ This established the foundation for the later command-and-control, reconnaissanc
 
 ## Command and Control
 
+Following the initial malicious document execution and establishment of Startup persistence, the investigation shifted to network telemetry to identify external communication associated with the compromised endpoint.
+
+Packet-capture analysis provided visibility into outbound connections, HTTP requests, destination infrastructure, and client-identification strings. These artifacts helped connect the endpoint execution chain to the attacker's command-and-control (C2) activity.
+
 ### C2 Infrastructure
+
+Network analysis identified communication involving the external domain:
+
+```text
+resolvecyber.xyz
+```
+
+The domain was investigated in the context of the suspicious endpoint activity rather than being classified as malicious based on its name alone.
+
+The surrounding attack sequence established that the endpoint had already executed attacker-controlled code, retrieved additional payloads, and created a persistence artifact. Subsequent communication with the external infrastructure was therefore treated as potentially related to the ongoing intrusion.
+
+The investigation distinguished between the earlier payload-delivery infrastructure and the infrastructure observed during subsequent C2 activity.
+
 ### HTTP Communication
+
+The packet capture contained HTTP activity associated with the compromised endpoint.
+
+Review of HTTP requests and related network metadata provided visibility into the external destination and application-layer communication behavior.
+
+This complemented the Sysmon investigation:
+
+```text
+Malicious document execution
+        ↓
+PowerShell payload retrieval
+        ↓
+Startup persistence
+        ↓
+Suspicious HTTP communication
+        ↓
+C2-related activity
+```
+
+The HTTP evidence was examined alongside endpoint artifacts to determine how the network activity fit into the broader attack sequence.
+
+Where request or response content was available, it provided additional context about the activity. Network connections alone were not treated as proof of the exact commands executed on the endpoint.
+
 ### User-Agent Analysis
+
+One distinctive network artifact was the HTTP User-Agent:
+
+```text
+Nim httpclient/1.6.6
+```
+
+This value indicated that the HTTP client identified itself as a Nim HTTP client rather than a conventional web browser.
+
+The User-Agent was useful because it could help distinguish suspicious application-generated requests from ordinary interactive browsing.
+
+However, User-Agent strings are client-controlled and can be modified or spoofed. The value was therefore treated as an investigative indicator rather than definitive proof of the software responsible for the communication.
+
+Its significance came from the correlation between the unusual HTTP client behavior and the independently identified malicious endpoint activity.
+
+### C2 Investigation Findings
+
+The network investigation established several important findings:
+
+1. The compromised environment contained suspicious HTTP communication associated with external infrastructure.
+2. `resolvecyber.xyz` was identified during investigation of the attacker's network activity.
+3. The `Nim httpclient/1.6.6` User-Agent provided an additional indicator for identifying related requests.
+4. Network evidence complemented the endpoint execution and persistence findings, strengthening reconstruction of the ongoing compromise.
+
+The combination of endpoint and network telemetry supported the assessment that the intrusion had progressed beyond initial execution into sustained attacker communication.
+
+The investigation then continued into internal reconnaissance, tunneling, and other post-compromise activity.
 
 ## Internal Reconnaissance
 
