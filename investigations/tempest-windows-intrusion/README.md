@@ -693,7 +693,137 @@ These distinctions ensured that the timeline represented what the preserved evid
 
 ## Key Findings
 
+The investigation identified a multi-stage Windows intrusion involving malicious document execution, command-and-control communication, credential discovery, network tunneling, privilege escalation, and multiple persistence mechanisms.
+
+### 1. Malicious Document Execution
+
+A Microsoft Word document, `free_magicules.doc`, initiated a suspicious execution chain involving `WINWORD.EXE`, `msdt.exe`, and encoded PowerShell.
+
+Process telemetry connected the document to subsequent attacker-controlled execution, providing stronger evidence than the presence of a suspicious document alone.
+
+### 2. Second-Stage Payload Delivery and Persistence
+
+Decoded PowerShell revealed the retrieval and extraction of `update.zip` from `phishteam.xyz`.
+
+Sysmon Event ID 11 subsequently recorded creation of `update.lnk` inside the Windows Startup directory, establishing a mechanism for execution at user logon.
+
+### 3. HTTP-Based Command and Control
+
+Network analysis identified repeated communication associated with `resolvecyber.xyz` and the unusual User-Agent `Nim httpclient/1.6.6`.
+
+Captured HTTP content also revealed encoded commands, including `whoami`, allowing network activity to be connected with post-compromise execution.
+
+### 4. Credential Discovery and Network Reconnaissance
+
+PowerShell output exposed embedded authentication material within `automation.ps1`.
+
+The attacker also executed `netstat -ano -p tcp` to enumerate listening services and their associated process IDs.
+
+These findings indicated that the attacker was gathering information useful for additional access.
+
+### 5. Reverse SOCKS Tunneling
+
+Sysmon process telemetry identified `ch.exe` executing a Chisel client with reverse SOCKS parameters:
+
+`client 167.71.199.191:8080 R:socks`
+
+This established evidence of attempted reverse tunneling through the compromised endpoint.
+
+The available screenshot did not independently prove that the tunnel successfully carried subsequent internal traffic.
+
+### 6. Privilege Escalation to SYSTEM
+
+Privilege enumeration using `whoami /priv` was followed by PrintSpoofer-related execution involving `spf.exe` and `final.exe`.
+
+Decoded command output subsequently reported `nt authority\system`, supporting the assessment that attacker-controlled execution reached the SYSTEM security context.
+
+### 7. Privileged Account Persistence
+
+Process evidence identified account-creation and modification commands targeting `shion` and `shuna`.
+
+Windows Security Event ID `4720` independently confirmed creation of `shion`, while Event ID `4732` confirmed that the account was added to the built-in Administrators group.
+
+These changes provided an additional potential access mechanism independent of the original malicious document.
+
+### 8. Windows Service Persistence Attempts
+
+Process evidence showed `sc.exe` commands requesting creation of two automatically starting services:
+
+- `TempestUpdate`
+- `TempestUpdate2`
+
+Both referenced `C:\ProgramData\final.exe`.
+
+The commands established an attempt to configure durable execution, although the preserved evidence did not independently confirm successful service installation.
+
+---
+
 ## Investigation Indicators
+
+The following indicators were identified from the preserved forensic evidence. They are specific to the simulated intrusion and should be interpreted in the context of the surrounding process, account, and network activity.
+
+### Network Indicators
+
+| Indicator | Context |
+| --- | --- |
+| `phishteam.xyz` | Infrastructure associated with second-stage payload delivery |
+| `resolvecyber.xyz` | Domain associated with suspicious HTTP/C2 activity |
+| `167.71.222.162` | Destination observed in repeated Sysmon network connections |
+| `167.71.199.191:8080` | Chisel reverse SOCKS server destination |
+| `Nim httpclient/1.6.6` | HTTP User-Agent observed during suspicious communication |
+
+### Files and Executables
+
+| Indicator | Context |
+| --- | --- |
+| `free_magicules.doc` | Malicious Word document associated with initial execution |
+| `update.zip` | Archive retrieved through decoded PowerShell |
+| `update.lnk` | Shortcut created in the Windows Startup directory |
+| `automation.ps1` | PowerShell script containing embedded domain credential material |
+| `first.exe` | Attacker-associated executable that spawned Chisel |
+| `ch.exe` | Chisel client used for reverse SOCKS tunneling |
+| `spf.exe` | PrintSpoofer executable used during privilege-escalation activity |
+| `final.exe` | Payload involved in SYSTEM-level execution and service-creation commands |
+
+### Accounts and Security Contexts
+
+| Indicator | Context |
+| --- | --- |
+| `TEMPEST\benimaru` | Domain account referenced in discovered credential configuration |
+| `shion` | Local account whose creation and Administrators membership were confirmed |
+| `shuna` | Local account targeted by account-management commands |
+| `NT AUTHORITY\SYSTEM` | Privileged security context reported in decoded command output |
+
+### Windows Event Indicators
+
+| Event ID / Source | Investigative Value |
+| --- | --- |
+| Sysmon Event ID 1 | Process creation, command-line activity, and parent-child relationships |
+| Sysmon Event ID 3 | Network connection activity |
+| Sysmon Event ID 11 | File creation, including the Startup shortcut |
+| Security Event ID 4720 | Local account creation |
+| Security Event ID 4722 | Account enablement |
+| Security Event ID 4724 | Password-reset activity |
+| Security Event ID 4738 | Account-property changes |
+| Security Event ID 4732 | Addition of an account to a security-enabled local group |
+
+### Persistence Artifacts
+
+| Artifact | Significance |
+| --- | --- |
+| `update.lnk` in the Windows Startup directory | Logon-based persistence |
+| `shion` in the local Administrators group | Potential persistent privileged account access |
+| `TempestUpdate` | Attempted automatic Windows service persistence |
+| `TempestUpdate2` | Additional attempted automatic Windows service persistence |
+| `C:\ProgramData\final.exe` | Executable referenced by service-creation commands |
+
+### Analyst Note
+
+These indicators should not be treated as universally malicious outside the context of this investigation.
+
+Utilities such as `certutil.exe`, PowerShell, `net.exe`, `sc.exe`, and `whoami.exe` have legitimate administrative uses. Their significance depends on how they were executed, their parent processes, associated network destinations, and their relationship to the broader intrusion.
+
+Likewise, observing a file, command, or network connection does not automatically establish that every subsequent attacker objective succeeded.
 
 ## MITRE ATT&CK Mapping
 
