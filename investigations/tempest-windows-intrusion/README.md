@@ -827,6 +827,37 @@ Likewise, observing a file, command, or network connection does not automaticall
 
 ## MITRE ATT&CK Mapping
 
+The Tempest investigation identified attacker behaviors spanning execution, persistence, discovery, credential access, command and control, privilege escalation, and account manipulation.
+
+The following techniques were mapped to the preserved Sysmon telemetry, Windows Security events, decoded command content, and network evidence.
+
+| Tactic | ATT&CK Technique | ID | Supporting Evidence |
+| --- | --- | --- | --- |
+| Execution | Command and Scripting Interpreter: PowerShell | `T1059.001` | Encoded PowerShell execution following the malicious Word/MSDT process chain |
+| Command and Control | Ingress Tool Transfer | `T1105` | PowerShell retrieval of `update.zip` from external infrastructure |
+| Persistence | Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder | `T1547.001` | Sysmon Event ID 11 recording creation of `update.lnk` in the Windows Startup directory |
+| Command and Control | Application Layer Protocol: Web Protocols | `T1071.001` | HTTP traffic to `resolvecyber.xyz` associated with suspicious C2 activity |
+| Discovery | System Owner/User Discovery | `T1033` | Decoded C2 command containing `whoami` |
+| Discovery | Network Service Discovery | `T1046` | Execution of `netstat -ano -p tcp` to enumerate listening services and ports |
+| Credential Access | Unsecured Credentials: Credentials in Files | `T1552.001` | Embedded domain authentication material identified in `automation.ps1` |
+| Command and Control | Proxy | `T1090` | Chisel client launched with reverse SOCKS parameters |
+| Privilege Escalation | Exploitation for Privilege Escalation | `T1068` | PrintSpoofer-associated execution followed by decoded output reporting `NT AUTHORITY\SYSTEM` |
+| Persistence | Create Account: Local Account | `T1136.001` | Windows Security Event ID 4720 confirming creation of `shion` |
+| Persistence / Privilege Escalation | Account Manipulation: Additional Local or Domain Groups | `T1098.007` | Event ID 4732 confirming addition of `shion` to the local Administrators group |
+| Persistence | Create or Modify System Process: Windows Service | `T1543.003` | `sc.exe` commands requesting creation of `TempestUpdate` and `TempestUpdate2` services with automatic startup |
+
+### Evidence and Mapping Considerations
+
+**Initial execution:** The observed `WINWORD.EXE` → `msdt.exe` → PowerShell chain established suspicious document-triggered execution. The mapping emphasizes the confirmed PowerShell behavior without assigning additional exploitation techniques unsupported by the preserved artifacts.
+
+**Tunneling:** Chisel was launched with reverse SOCKS parameters, supporting the Proxy technique. The available process evidence does not independently confirm that the tunnel successfully relayed subsequent internal traffic.
+
+**Privilege escalation:** PrintSpoofer execution and later SYSTEM identity output support the escalation assessment. The exact operating-system vulnerability or privilege-abuse mechanism was not independently reconstructed, so the mapping should not be interpreted as proof of a particular CVE.
+
+**Account persistence:** Account creation and Administrator-group membership were confirmed through Windows Security events. The Windows service mapping describes observed service-creation commands, not verified installation or successful startup.
+
+These mappings represent investigative classifications of the activity observed in the simulated environment. They do not imply that every attacker objective succeeded or that the listed techniques are malicious in every context.
+
 ## Detection Opportunities
 
 ## Remediation Recommendations
