@@ -306,6 +306,24 @@ After establishing command-and-control communication, the attacker began gatheri
 
 The preserved network and endpoint evidence showed post-compromise commands aimed at identifying the current execution context, locating potentially useful information, and discovering services that could support additional access.
 
+### C2 Command Decoding
+
+Packet analysis provided visibility into HTTP content associated with the attacker's command-and-control infrastructure.
+
+A captured HTTP response contained Base64-encoded content that decoded to:
+
+```text
+whoami
+```
+
+Additional decoded command content included a local-account creation command.
+
+The decoded `whoami` instruction demonstrated an attempt to identify the current Windows execution context, while the account-creation command indicated activity extending beyond reconnaissance into account manipulation.
+
+![Decoded C2 command activity](evidence/07-c2-command-decoding.png)
+
+*Figure 7 — HTTP-stream analysis and Base64 decoding identifying command content, including `whoami`, associated with the attacker-controlled communication channel.*
+
 ### Credential Discovery
 
 Investigation of the attacker's command activity revealed attempts to locate information useful for further authentication or movement through the environment.
@@ -316,6 +334,16 @@ Credential-related discovery therefore represented an expansion of the compromis
 
 The investigation distinguished discovery of potentially sensitive information from confirmed credential extraction. The available evidence must support each conclusion separately.
 
+Review of the PowerShell command output also exposed credential material stored in `automation.ps1` under the compromised user's Desktop directory.
+
+The script contained a domain username, a plaintext password assignment, and PowerShell commands constructing a `PSCredential` object.
+
+This represented a potential credential-exposure opportunity because the script stored reusable authentication material in a recoverable form.
+
+![Credential material identified in PowerShell script](evidence/08-credential-discovery.png)
+
+*Figure 8 — PowerShell output showing embedded domain credential configuration in `automation.ps1`, with the plaintext password redacted.*
+
 ### Service and Port Enumeration
 
 The attacker also investigated network services and listening ports on the compromised host.
@@ -325,6 +353,18 @@ Identifying listening services can reveal opportunities for remote access, later
 The observed behavior was consistent with post-compromise reconnaissance intended to establish what additional access mechanisms were available.
 
 The investigation considered the surrounding process and command context rather than treating port-enumeration utilities as inherently malicious.
+
+The attacker also executed:
+
+`netstat -ano -p tcp`
+
+The command output identified several listening TCP ports, including TCP/445 and TCP/5985, along with their associated process IDs.
+
+These results provided information about services available on the compromised endpoint and potential opportunities for additional access.
+
+![TCP listening ports and process IDs](evidence/09-listening-port-enumeration.png)
+
+*Figure 9 — Windows `netstat` output identifying listening TCP ports and associated process IDs during post-compromise reconnaissance.*
 
 ### Investigation Significance
 
