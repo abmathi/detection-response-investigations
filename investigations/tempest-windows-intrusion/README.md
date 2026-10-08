@@ -302,8 +302,37 @@ The investigation then continued into internal reconnaissance, tunneling, and ot
 
 ## Internal Reconnaissance
 
+After establishing command-and-control communication, the attacker began gathering information about the compromised Windows environment.
+
+The preserved network and endpoint evidence showed post-compromise commands aimed at identifying the current execution context, locating potentially useful information, and discovering services that could support additional access.
+
 ### Credential Discovery
+
+Investigation of the attacker's command activity revealed attempts to locate information useful for further authentication or movement through the environment.
+
+The significance of this activity came from its position in the intrusion sequence. The endpoint had already experienced malicious document execution, payload delivery, persistence, and suspicious network communication.
+
+Credential-related discovery therefore represented an expansion of the compromise rather than normal system administration.
+
+The investigation distinguished discovery of potentially sensitive information from confirmed credential extraction. The available evidence must support each conclusion separately.
+
 ### Service and Port Enumeration
+
+The attacker also investigated network services and listening ports on the compromised host.
+
+Identifying listening services can reveal opportunities for remote access, lateral movement, or further exploitation.
+
+The observed behavior was consistent with post-compromise reconnaissance intended to establish what additional access mechanisms were available.
+
+The investigation considered the surrounding process and command context rather than treating port-enumeration utilities as inherently malicious.
+
+### Investigation Significance
+
+The reconnaissance activity demonstrated that the attacker was using the compromised endpoint as more than a temporary execution environment.
+
+By identifying useful information and reachable services, the attacker was preparing for subsequent actions involving tunneling, remote access, and privilege escalation.
+
+These observations helped bridge the earlier command-and-control activity with the later deployment of Chisel and additional post-exploitation tooling.
 
 ## Tunneling and Remote Access
 
