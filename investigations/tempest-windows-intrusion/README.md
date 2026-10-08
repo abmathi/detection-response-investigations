@@ -451,8 +451,55 @@ This stage demonstrated how a compromised endpoint can become an intermediary fo
 
 ## Privilege Escalation
 
+Following the establishment of command-and-control communication and reverse SOCKS tunneling, the investigation identified activity associated with privilege escalation on the compromised Windows endpoint.
+
+Process-creation and command-line evidence showed the attacker examining the privileges available to the current security context before executing additional tooling.
+
 ### SeImpersonatePrivilege
+
+Windows process telemetry showed execution of the following command:
+
+`whoami /priv`
+
+This command enumerates the privileges assigned to the current process security token.
+
+The output identified `SeImpersonatePrivilege`, a Windows privilege that allows a process to impersonate another security context under applicable conditions.
+
+While this privilege can be present during legitimate Windows operations, it can also be abused by local privilege-escalation techniques.
+
+In the context of the ongoing intrusion, the enumeration was significant because it preceded subsequent activity associated with elevated execution.
+
+The evidence established that the attacker investigated the available privileges. The presence of `SeImpersonatePrivilege` alone did not prove successful exploitation.
+
 ### SYSTEM-Level Access
+
+Subsequent attacker activity indicated that execution had progressed to the Windows `NT AUTHORITY\SYSTEM` security context.
+
+SYSTEM is a highly privileged local Windows security identity used by operating-system services and components.
+
+Attacker-controlled execution at this level can provide broad access to local resources and support additional persistence or security-control tampering.
+
+The investigation correlated the privilege-enumeration activity with later process and command evidence supporting SYSTEM-level execution.
+
+This distinction was important:
+
+- **Privilege discovery:** the attacker examined available token privileges using `whoami /priv`.
+- **Privilege escalation:** subsequent behavior indicated a transition into a more privileged security context.
+- **SYSTEM-level execution:** later artifacts supported attacker-controlled command execution under `NT AUTHORITY\SYSTEM`.
+
+The preserved evidence supports the progression to SYSTEM-level activity, but the precise exploitation mechanism should not be inferred solely from the presence of `SeImpersonatePrivilege`.
+
+### Investigation Findings
+
+The privilege-escalation investigation established the following:
+
+1. The attacker enumerated the current Windows privileges using `whoami /priv`.
+2. `SeImpersonatePrivilege` was identified as an available privilege.
+3. Subsequent activity supported execution in the SYSTEM security context.
+4. The escalation occurred after the initial compromise, command-and-control activity, and tunneling-related execution.
+5. The exact privilege-escalation mechanism requires evidence beyond privilege enumeration alone.
+
+This stage was significant because SYSTEM-level access expanded the potential impact of the compromise and preceded the account-management activity investigated in the following section.
 
 ## Persistence and Account Manipulation
 
