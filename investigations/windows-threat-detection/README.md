@@ -292,3 +292,47 @@ The preserved evidence confirmed the initial process execution and subsequent fi
 - Correlate executable creation on a second removable drive with preceding execution from another drive.
 - Investigate files impersonating removable-drive utilities or operating-system update components.
 - Use Sysmon Event IDs `1` and `11` to connect originating processes with newly created executable files.
+
+## Discovery and Collection
+
+### Scenario 4 — Suspicious Process Ancestry and System Discovery
+
+#### Investigation Context
+
+This scenario investigated suspicious Windows process activity associated with an executable named `invoice.pdf.exe`.
+
+The filename used a double extension to resemble a PDF document while remaining a Windows executable.
+
+The investigation focused on identifying the processes launched by the executable and determining whether their behavior was consistent with post-compromise reconnaissance.
+
+#### Process Ancestry
+
+Sysmon process-creation telemetry provided visibility into the suspicious executable and its child processes.
+
+Instead of treating individual commands as unrelated events, the investigation examined their relationship to the originating executable.
+
+The process ancestry was important because legitimate Windows discovery commands can become suspicious when launched by an unexpected executable masquerading as a document.
+
+#### System Discovery
+
+The observed child-process activity included commands used to gather information about the Windows environment.
+
+The investigation examined the commands in the context of their parent process to assess whether the behavior was consistent with normal administration or attacker reconnaissance.
+
+These observations supported an assessment of suspicious system discovery following execution of the apparent invoice attachment.
+
+#### Analyst Assessment
+
+The combination of a double-extension executable and related discovery commands was consistent with potentially malicious reconnaissance activity.
+
+**Assessment:** Suspicious execution and post-compromise system discovery.
+
+The process telemetry supported the execution relationship and discovery behavior, but did not independently establish subsequent lateral movement or privilege escalation.
+
+#### Detection Opportunities
+
+- Monitor executables using document-like double extensions, such as `.pdf.exe`.
+- Detect unusual parent processes launching Windows discovery utilities.
+- Correlate multiple discovery commands originating from a common process tree.
+- Investigate suspicious executables launched from user-controlled locations.
+- Use Sysmon process telemetry to distinguish command execution from assumed attacker outcomes.
