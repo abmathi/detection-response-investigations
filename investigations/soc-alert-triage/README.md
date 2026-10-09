@@ -364,3 +364,138 @@ The combined observations warranted escalation for potential unauthorized access
 However, the preserved evidence did not establish successful external receipt of the financial records, nor did the simulator provide a documented record of production containment or remediation actions.
 
 The final disposition was therefore an evidence-based suspicious-activity assessment within a completed SOC simulation, rather than a claim that a real-world incident had been fully contained and eradicated.
+
+## Detection Opportunities
+
+The investigation identified several behaviors that could be monitored through endpoint and SIEM telemetry. The strongest detections would correlate related activities instead of treating each command or executable as inherently malicious.
+
+| Detection Opportunity | Suggested Logic | Relevant Telemetry |
+| --- | --- | --- |
+| Suspicious PowerShell activity | Identify unusual PowerShell execution, script creation, and suspicious command-line arguments | Process creation, PowerShell logging, file-creation events |
+| Reconnaissance tooling | Investigate unexpected creation or execution of scripts such as `PowerView.ps1` | File-creation events, script-block logging, endpoint telemetry |
+| Financial-share access | Detect unusual network-share mapping involving sensitive business resources | Process creation, file-share auditing, authentication logs |
+| Bulk file collection | Correlate Robocopy execution with access to sensitive directories and unusual local staging paths | Process events, file-access auditing, file-creation events |
+| Archive preparation | Identify suspicious archive creation following large or unusual file-copy operations | PowerShell logging, process creation, file telemetry |
+| DNS exfiltration patterns | Investigate repeated DNS queries containing unusually long or encoded-looking subdomains | DNS resolver logs, network telemetry, SIEM detections |
+| Unauthorized remote communication | Detect Powercat-related activity and unexpected connections to external relay services | PowerShell logging, network connections, endpoint telemetry |
+
+### Recommended Correlation
+
+A particularly useful detection would combine several of the observed behaviors:
+
+1. A suspicious PowerShell process executes on a monitored endpoint.
+2. The endpoint accesses a sensitive network share.
+3. File-copy or archive-creation activity follows.
+4. The endpoint generates unusual outbound DNS requests.
+
+When these behaviors occur within a related host, user, and process timeframe, they provide a stronger indication of possible data theft than any single event alone.
+
+This correlation was proposed as a detection opportunity. It was not implemented or tested as a production SIEM rule during the simulation.
+
+---
+
+## Response Recommendations
+
+If similar activity were identified in a production environment, the following response actions would be appropriate, subject to organizational incident-response procedures.
+
+### Validate and Escalate
+
+- Preserve the associated alert records and relevant endpoint and network telemetry.
+- Correlate related processes using host identity, timestamps, and process identifiers.
+- Review the affected user's authorization to access the financial records share.
+- Escalate the suspected data-collection and exfiltration sequence for incident-response investigation.
+
+### Investigate Potential Data Exposure
+
+- Review file-access and file-share auditing to identify which financial records were accessed.
+- Examine Robocopy activity and resulting files to establish what was successfully copied.
+- Locate the suspected staging directory and ZIP archive, preserving forensic evidence.
+- Review DNS query logs for unusual payload structures and possible data transfer.
+- Investigate the Powercat relay connection separately to determine whether an unauthorized remote session occurred.
+
+### Contain Confirmed Malicious Activity
+
+Where investigation confirms an active compromise:
+
+- Isolate affected endpoints according to the organization's containment procedures.
+- Block confirmed malicious infrastructure and unauthorized external communication.
+- Review potentially compromised credentials and active sessions.
+- Remove unauthorized persistence mechanisms after necessary evidence has been preserved.
+
+### Improve Defensive Visibility
+
+- Enable appropriate PowerShell and process-creation logging.
+- Collect DNS resolver logs and relevant network-flow telemetry.
+- Audit access to sensitive network shares.
+- Monitor unusual file-copy and archive-creation behavior.
+- Develop SIEM detections correlating endpoint activity with suspected exfiltration.
+
+These are recommended response actions. The simulation did not provide evidence that production containment, eradication, or recovery procedures were performed.
+
+---
+
+## Evidence Limitations
+
+This case study was reconstructed from five preserved screenshots and the analyst's investigation notes.
+
+The available evidence supports an assessment of suspicious PowerShell activity, financial-share access, potential file collection, and network behavior consistent with suspected exfiltration. However, several conclusions remain limited by the preserved artifacts.
+
+| Finding | Evidence Available | Limitation |
+| --- | --- | --- |
+| PowerView artifact | Screenshot showing `PowerView.ps1` creation | Does not independently prove script execution |
+| PowerShell correlation | Investigation notes identifying PID `3728` | Full process tree and all relevant timestamps were not preserved |
+| Financial-share access | Screenshot showing drive-mapping command activity | Does not independently prove successful access to every file |
+| Financial-data collection | Screenshot showing Robocopy activity | Does not establish the quantity or contents of successfully copied files |
+| Local staging | Analyst investigation notes | Complete staging-directory contents were not preserved |
+| Suspected DNS exfiltration | Recorded observations of repeated, encoded-looking DNS queries | DNS screenshot and decoded query payload were not preserved |
+| Powercat communication | Analyst notes identifying an external relay destination | Does not independently confirm an established remote shell |
+| Final alert decisions | Simulator results screenshot | Individual screenshots of the final batch of alerts were not preserved |
+
+### Interpretation
+
+The observed activity was sufficiently suspicious to justify true-positive classification and escalation within the simulation.
+
+However, attempted data access, archive preparation, and unusual outbound DNS traffic do not independently establish that sensitive information was successfully transferred outside the environment.
+
+The investigation therefore distinguishes **suspected data exfiltration** from **confirmed data loss**.
+
+The final simulator metrics demonstrate performance within the exercise, not independently verified production incident-response outcomes.
+
+---
+
+## Skills Demonstrated
+
+**SOC Alert Triage**
+- Security alert investigation and classification
+- True-positive and false-positive assessment
+- Alert prioritization and escalation decisions
+- Correlation of related security detections
+
+**Endpoint Investigation**
+- Windows process and PID analysis
+- Suspicious PowerShell activity
+- File-creation and command-line investigation
+- Network-share mapping and Robocopy analysis
+
+**Network Security Monitoring**
+- Suspicious DNS activity investigation
+- Potential DNS exfiltration identification
+- External relay and remote-access indicators
+
+**Incident Analysis and Reporting**
+- Reconstruction of potentially related attacker activity
+- Evidence-based investigative conclusions
+- Identification of telemetry gaps
+- Detection engineering recommendations
+- Incident-response planning
+
+### Investigation Takeaway
+
+The central lesson from this investigation was the importance of correlating alerts across multiple stages of suspicious activity.
+
+Individually, PowerShell execution, drive mapping, Robocopy, and DNS lookups can all occur during legitimate operations.
+
+Together, when associated with the same endpoint and a consistent suspicious execution context, they can indicate a coordinated attempt to access, collect, and potentially exfiltrate sensitive information.
+
+This case study demonstrates the value of moving beyond individual alert classifications to understand the broader security incident.
+
