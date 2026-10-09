@@ -221,3 +221,71 @@ A network drive-mapping command or Robocopy execution would not ordinarily justi
 However, their appearance alongside suspected attacker-controlled PowerShell activity, local staging, and later unusual DNS requests supported escalation for possible unauthorized data collection.
 
 **Finding:** The preserved evidence supported suspected financial-data collection and staging activity, but did not independently establish the complete contents or quantity of files successfully collected.
+
+## Suspected DNS Exfiltration and External Communication
+
+### Suspicious DNS Activity
+
+Following the financial-share access, file-copy activity, and local data staging, the investigation notes documented repeated execution of `nslookup.exe`.
+
+The observed DNS queries involved the external domain:
+
+`haz4rdw4re.io`
+
+The recorded query content appeared to contain encoded data, raising concern that DNS requests were being used to transmit information outside the environment.
+
+DNS tunneling and exfiltration techniques can abuse the normal domain-resolution process by embedding data into DNS query names.
+
+In this investigation, the concern was strengthened by the surrounding activity: suspicious PowerShell execution, financial records collection, and ZIP archive preparation.
+
+### Process Correlation
+
+The investigation notes associated the suspicious DNS activity with the broader sequence involving PowerShell PID `3728`.
+
+This provided a potential relationship between data collection and subsequent outbound communication.
+
+The reconstructed activity was:
+
+| Stage | Recorded Observation | Investigative Significance |
+| --- | --- | --- |
+| 1 | Local staging directory created | Potential preparation for collecting files |
+| 2 | Financial network share accessed | Access to potentially sensitive business information |
+| 3 | Robocopy executed | Possible collection of financial records |
+| 4 | ZIP archive prepared | Potential consolidation of collected data |
+| 5 | Repeated `nslookup.exe` activity | Possible transfer of encoded data through DNS |
+
+The sequence was consistent with a suspected data-exfiltration workflow.
+
+However, the preserved evidence did not independently establish that the DNS requests contained the financial records or that a remote system successfully received the data.
+
+### Additional Powercat Activity
+
+The investigation notes also recorded suspicious Powercat-related activity involving the external relay destination:
+
+`2.tcp.ngrok.io:19282`
+
+Powercat is a PowerShell-based networking utility that can establish TCP connections and support remote command execution or data transfer.
+
+The presence of Powercat-related activity and an external relay endpoint raised concern about an additional remote-access or communication channel.
+
+This was documented separately from the suspected DNS exfiltration because the preserved evidence did not establish that the two communication mechanisms served the same purpose.
+
+The available notes did not independently prove a successfully established reverse shell or identify specific commands exchanged through the relay.
+
+### Analyst Assessment
+
+The combination of suspicious PowerShell behavior, financial-share access, file collection, archive preparation, and unusual DNS requests supported treating the activity as a potential security incident.
+
+The observed pattern warranted escalation for suspected data collection and exfiltration.
+
+**Assessment: Suspected data exfiltration.**
+
+The evidence supported an attempted or potentially ongoing exfiltration sequence, but did not independently confirm successful transfer of financial records to an external destination.
+
+### Evidence Limitation
+
+The original investigation notes reference DNS activity and encoded-looking queries, but the corresponding screenshot was not preserved before the simulation concluded.
+
+Consequently, this section is supported by the analyst's recorded observations rather than a directly embedded DNS screenshot.
+
+The report does not claim that the specific DNS payload was decoded or that the contents of the queries were conclusively identified as exfiltrated financial data.
