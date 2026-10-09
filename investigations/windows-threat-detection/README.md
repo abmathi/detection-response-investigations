@@ -622,3 +622,79 @@ The preserved events confirmed account-management changes. They did not independ
 - Investigate account-management events occurring shortly after suspicious executable or PowerShell activity.
 - Review the subject account responsible for changes and the affected account's intended purpose.
 - Detect newly created privileged accounts outside approved provisioning workflows.
+
+### Scenario 8 — Windows Service Persistence
+
+#### Investigation Context
+
+This scenario examined suspicious Windows service activity consistent with establishing persistence on a compromised endpoint.
+
+Windows services can be configured to start automatically when the operating system boots, making unauthorized service installation a potential method of maintaining access across restarts.
+
+The investigation focused on the service configuration, executable path, and startup behavior.
+
+#### Service Installation and Configuration
+
+The preserved evidence identified the creation of a Windows service configured for automatic startup.
+
+The investigation examined the service name, executable path, and startup configuration to determine how the service could provide persistent execution.
+
+An unexpected service referencing an unfamiliar executable is particularly suspicious when it appears outside approved software installation or administrative workflows.
+
+![Windows service persistence](evidence/20-windows-service-persistence.png)
+
+*Figure 20 — Windows service configuration evidence identifying an automatically starting service and its associated executable.*
+
+#### Analyst Assessment
+
+An automatically starting service provides a potential execution mechanism that persists beyond the original user session.
+
+**Assessment:** Suspicious Windows service configuration consistent with persistence.
+
+The observed configuration supported the persistence assessment, but did not independently establish that the service had successfully executed its payload after a system restart.
+
+#### Detection Opportunities
+
+- Monitor newly installed Windows services using System Event ID `7045` where available.
+- Review service startup types, executable paths, and responsible accounts.
+- Alert on unexpected services configured for automatic startup.
+- Investigate services referencing executables in unusual or user-writable locations.
+- Correlate service changes with preceding suspicious process or account-management activity.
+
+### Scenario 9 — Scheduled Task Persistence
+
+#### Investigation Context
+
+The final scenario investigated suspicious Windows scheduled-task configuration.
+
+Scheduled tasks can be configured to execute programs at logon, system startup, or specified intervals. Attackers can abuse these capabilities to regain execution without requiring a user to manually launch the original payload.
+
+The investigation focused on identifying the task trigger and the program configured to execute.
+
+#### Task Configuration
+
+The evidence identified a scheduled task configured with a boot trigger.
+
+A boot-triggered task is particularly relevant to persistence because it is designed to run when the system starts.
+
+The task configuration was examined to identify the execution behavior requested by the task.
+
+![Scheduled task persistence](evidence/21-scheduled-task-persistence.png)
+
+*Figure 21 — Scheduled-task configuration evidence identifying a boot-triggered task associated with suspicious persistence activity.*
+
+#### Analyst Assessment
+
+The scheduled task provided a potential method for recurring execution following system startup.
+
+**Assessment:** Suspicious scheduled-task configuration consistent with persistence.
+
+The task configuration indicated intended execution at boot, but the preserved evidence did not independently confirm successful payload execution after a restart.
+
+#### Detection Opportunities
+
+- Monitor Windows Security Event ID `4698` for scheduled-task creation where auditing is enabled.
+- Review Task Scheduler Operational events and task XML definitions.
+- Alert on unexpected tasks configured to execute at system startup.
+- Investigate task actions referencing suspicious or user-writable executable paths.
+- Correlate scheduled-task creation with preceding malicious execution or privilege changes.
