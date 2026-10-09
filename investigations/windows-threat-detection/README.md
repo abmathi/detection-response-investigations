@@ -356,3 +356,61 @@ The process telemetry supported the execution relationship and discovery behavio
 - Correlate multiple discovery commands originating from a common process tree.
 - Investigate suspicious executables launched from user-controlled locations.
 - Use Sysmon process telemetry to distinguish command execution from assumed attacker outcomes.
+
+### Scenario 5 — Automated Data Collection and Staging
+
+#### Investigation Context
+
+The fifth scenario involved a suspicious executable named `stealer.exe` performing activity consistent with automated information collection.
+
+The investigation focused on identifying the executable's behavior through process-creation events, command-line evidence, and DNS telemetry.
+
+The objective was to determine whether the observed activity indicated collection, staging, or potential exfiltration of information.
+
+#### Collection and Staging Activity
+
+The investigation identified suspicious process activity associated with `stealer.exe`.
+
+Related command execution indicated attempts to collect information from the Windows environment and prepare it for potential transfer.
+
+Process relationships were used to connect the observed commands to the originating executable rather than treating them as unrelated administrative activity.
+
+The behavior was consistent with a potential data-collection workflow, although process execution alone did not establish the complete contents of collected information.
+
+#### Clipboard Collection
+
+Additional process evidence identified PowerShell executing:
+
+`Get-Clipboard`
+
+This command retrieves the current contents of the Windows clipboard.
+
+In the context of suspicious `stealer.exe` activity, clipboard access raised concern about collection of sensitive information, including potentially copied credentials or other confidential data.
+
+However, the command's execution did not independently establish what information was present in the clipboard or whether the result was successfully transferred elsewhere.
+
+#### External Destination Investigation
+
+Sysmon DNS telemetry identified a query involving:
+
+`collecteddata-storage-2025.s3.amazonaws.com`
+
+The destination resembled an Amazon S3 storage endpoint and was investigated as a possible location for collected information.
+
+The DNS event established attempted name resolution associated with the observed activity. It did not prove that a network connection succeeded or that information was uploaded.
+
+#### Analyst Assessment
+
+The combination of a suspicious executable, data-collection commands, clipboard access, and DNS activity involving an external storage destination was consistent with possible information theft.
+
+**Assessment:** Suspicious automated collection and staging with potential exfiltration intent.
+
+The investigation supported identification of collection-related behaviors but did not independently confirm successful transfer of collected data to the external destination.
+
+#### Detection Opportunities
+
+- Correlate suspicious executables with the commands and processes they spawn.
+- Monitor unexpected PowerShell clipboard access in suspicious execution contexts.
+- Identify unusual collection or staging activity in user-writable directories.
+- Correlate collection behavior with subsequent DNS queries for external storage services.
+- Investigate potential data transfer using network telemetry rather than inferring an upload solely from DNS activity.
