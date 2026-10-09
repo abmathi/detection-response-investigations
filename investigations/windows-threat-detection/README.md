@@ -341,6 +341,24 @@ This command searched the running process list for the CrowdStrike Falcon sensor
 
 *Figure 10 — Sysmon Event ID 1 showing `cmd.exe` launched by `invoice.pdf.exe` to check for the CrowdStrike Falcon sensor process.*
 
+#### Suspicious DNS Resolution
+
+Sysmon Event ID 22 recorded a DNS query for `exfil.beecz.cafe`
+associated with `invoice.pdf.exe`.
+
+The event returned QueryStatus `9003`, indicating that the DNS
+name could not be resolved.
+
+![Invoice executable DNS query](evidence/11-invoice-dns-query.png)
+
+*Figure 11 — Sysmon Event ID 22 showing `invoice.pdf.exe`
+querying `exfil.beecz.cafe`. QueryStatus 9003 indicates a
+DNS name error.*
+
+This connected attempted external communication to the
+suspicious executable but did not establish successful
+command-and-control communication or data exfiltration.
+
 #### Analyst Assessment
 
 The combination of a double-extension executable and related discovery commands was consistent with potentially malicious reconnaissance activity.
@@ -377,6 +395,20 @@ Process relationships were used to connect the observed commands to the originat
 
 The behavior was consistent with a potential data-collection workflow, although process execution alone did not establish the complete contents of collected information.
 
+Process evidence showed `stealer.exe` launching a command
+to create a staging directory:
+
+`cmd /c "mkdir %TEMP%\staging_58f1"`
+
+The directory was consistent with preparation for collecting
+information before potential transfer.
+
+![Stealer staging directory](evidence/12-stealer-staging-directory.png)
+
+*Figure 12 — Sysmon Event ID 1 showing the suspicious
+`stealer.exe` process launching `cmd.exe` to create a
+temporary staging directory.*
+
 #### Clipboard Collection
 
 Additional process evidence identified PowerShell executing:
@@ -389,6 +421,20 @@ In the context of suspicious `stealer.exe` activity, clipboard access raised con
 
 However, the command's execution did not independently establish what information was present in the clipboard or whether the result was successfully transferred elsewhere.
 
+The recorded PowerShell command redirected clipboard content
+toward a file in the temporary staging directory:
+
+`powershell -c "Get-Clipboard > $env:Temp\staging_58f1\clipboard.txt"`
+
+![Stealer clipboard collection](evidence/13-stealer-clipboard-collection.png)
+
+*Figure 13 — Sysmon Event ID 1 showing PowerShell clipboard
+collection initiated from the `stealer.exe` process context.*
+
+The process event confirmed execution of the collection
+command, but did not independently reveal the clipboard
+contents or verify the resulting file contents.
+
 #### External Destination Investigation
 
 Sysmon DNS telemetry identified a query involving:
@@ -398,6 +444,16 @@ Sysmon DNS telemetry identified a query involving:
 The destination resembled an Amazon S3 storage endpoint and was investigated as a possible location for collected information.
 
 The DNS event established attempted name resolution associated with the observed activity. It did not prove that a network connection succeeded or that information was uploaded.
+
+![Stealer external storage DNS query](evidence/14-stealer-s3-dns.png)
+
+*Figure 14 — Sysmon Event ID 22 showing `stealer.exe`
+resolving `collecteddata-storage-2025.s3.amazonaws.com`.*
+
+The observed DNS response supported successful name
+resolution of the external storage hostname. It did not
+independently establish an HTTP connection, S3 upload,
+or successful data exfiltration.
 
 #### Analyst Assessment
 
