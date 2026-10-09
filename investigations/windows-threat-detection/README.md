@@ -212,3 +212,83 @@ The evidence supported the presence of process and DNS activity, but did not ind
 - Investigate unexpected executables associated with phishing-related alerts.
 - Review parent-child process relationships and execution paths.
 - Prioritize processes contacting unusual external domains shortly after execution.
+
+### Scenario 3 — Removable-Media Infection and Propagation
+
+#### Investigation Context
+
+The third scenario involved suspicious executable activity originating from a removable USB drive, followed by the creation of additional executable files on the compromised Windows endpoint and another removable drive.
+
+The investigation used Sysmon process-creation and file-creation events to determine how the suspicious executable operated and whether the activity was consistent with malware propagation.
+
+#### Initial Execution from Removable Media
+
+Sysmon Event ID `1` identified the execution of an executable named:
+
+`E:\Open Sandisk 4GB USB.exe`
+
+The executable ran from the `E:` drive, which represented the removable-media location in the simulated scenario.
+
+Its filename resembled a utility for opening the USB drive, potentially encouraging a user to execute it while accessing removable storage.
+
+The process-creation event established that the executable ran, rather than merely existing on the USB drive.
+
+![USB executable process creation](evidence/05-usb-executable-execution.png)
+
+*Figure 5 — Sysmon Event ID 1 showing execution of `Open Sandisk 4GB USB.exe` from the removable `E:` drive.*
+
+#### Local Payload Creation
+
+Subsequent Sysmon Event ID `11` telemetry recorded the USB-hosted executable creating another file:
+
+`C:\Users\Public\Documents\winupdate.exe`
+
+The source process was the same suspicious USB executable identified in the earlier process-creation event.
+
+This connected removable-media execution to the creation of a second executable in a local Windows directory.
+
+The filename `winupdate.exe` resembled Windows update-related software, although the preserved evidence did not establish that the executable was a legitimate Windows component.
+
+![Local payload creation](evidence/06-usb-local-payload.png)
+
+*Figure 6 — Sysmon Event ID 11 recording the USB executable creating `winupdate.exe` in `C:\Users\Public\Documents`.*
+
+The file-creation event confirmed that the executable was written to disk. It did not independently establish that `winupdate.exe` subsequently executed.
+
+#### Propagation to Another USB Drive
+
+Another Sysmon Event ID `11` recorded the original USB executable creating a file on a second removable drive:
+
+`F:\Open Data Traveler 32 GB USB.exe`
+
+The filename again resembled a removable-drive access utility.
+
+This behavior was consistent with a malware propagation attempt: an executable originating from one USB drive created a similarly named executable on another removable drive.
+
+![USB propagation evidence](evidence/07-usb-propagation.png)
+
+*Figure 7 — Sysmon Event ID 11 showing `Open Sandisk 4GB USB.exe` creating `Open Data Traveler 32 GB USB.exe` on the `F:` drive.*
+
+The evidence established file creation on the second drive, but did not prove that the new executable was later launched or infected another endpoint.
+
+#### Analyst Assessment
+
+The investigation identified three connected observations:
+
+1. A suspicious executable launched from removable media.
+2. That executable created a local executable named `winupdate.exe`.
+3. The same source process created another drive-themed executable on a second removable drive.
+
+The combination of execution from removable media, local payload creation, and replication onto another drive was consistent with malware propagation.
+
+**Assessment:** Suspicious removable-media execution and probable propagation activity.
+
+The preserved evidence confirmed the initial process execution and subsequent file creation. It did not independently establish execution of the newly created files.
+
+#### Detection Opportunities
+
+- Detect unexpected executable launches from removable drive letters.
+- Monitor removable-media processes creating executables in local Windows directories.
+- Correlate executable creation on a second removable drive with preceding execution from another drive.
+- Investigate files impersonating removable-drive utilities or operating-system update components.
+- Use Sysmon Event IDs `1` and `11` to connect originating processes with newly created executable files.
