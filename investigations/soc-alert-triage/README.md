@@ -102,3 +102,62 @@ The alert queue was treated as the starting point of the investigation, not as p
 The strongest investigative value came from correlating later PowerShell, file-access, and network activity.
 
 That correlation is examined in the following sections, beginning with a PowerShell process that appeared repeatedly across the investigation.
+
+## PowerShell Process Correlation
+
+### Suspicious PowerShell Activity
+
+As the investigation progressed, multiple alerts involved PowerShell activity on the Windows endpoint `win-3450`.
+
+Rather than treating every PowerShell-related alert as a separate incident, I examined process identifiers, command-line arguments, and file-system activity to determine whether the events could be associated with a broader intrusion.
+
+Two process contexts were significant:
+
+| Process ID | Observed Activity | Investigative Significance |
+| --- | --- | --- |
+| `9060` | PowerShell-related creation of `PowerView.ps1` | Potential preparation for Active Directory reconnaissance |
+| `3728` | PowerShell activity associated with later file collection and network operations | Common execution context connecting multiple suspicious alerts |
+
+These observations suggested different roles within the activity, but the preserved evidence did not independently establish a parent-child relationship between the two PowerShell processes.
+
+### PowerView Script Creation
+
+One alert identified PowerShell process ID `9060` creating a file named `PowerView.ps1`.
+
+PowerView is a PowerShell-based tool commonly associated with Active Directory enumeration. In an enterprise environment, its unexpected presence warrants investigation because it can support discovery of domain users, groups, computers, permissions, and other directory resources.
+
+![PowerView script creation evidence](evidence/02-powerview-artifact.png)
+
+*Figure 2 — Endpoint telemetry showing PowerShell process ID `9060` associated with creation of `PowerView.ps1` on `win-3450`.*
+
+The creation of this file was suspicious in the context of the broader alert sequence. However, a file-creation event does not independently prove that the script executed or that Active Directory reconnaissance successfully occurred.
+
+The finding was therefore documented as **suspected reconnaissance preparation**, rather than confirmed execution of PowerView.
+
+### Identifying a Common Process Context
+
+A separate PowerShell process, PID `3728`, appeared in the investigation notes alongside multiple subsequent activities.
+
+Those activities included:
+
+- Creation of a local directory potentially used for staging collected data.
+- Access to a network share containing financial records.
+- File-copy activity involving Robocopy.
+- Preparation of a ZIP archive.
+- Repeated DNS lookups requiring investigation for possible data exfiltration.
+
+The recurrence of the same process identifier provided a useful pivot for correlating activity that might otherwise appear as unrelated alerts.
+
+However, a matching PID is meaningful only when evaluated with the endpoint identity and event timeframe, because Windows can reuse process identifiers.
+
+### Analyst Assessment
+
+The evidence supported two separate observations.
+
+**PowerShell PID 9060:** A potentially suspicious PowerView script was created. The preserved screenshot did not prove subsequent execution.
+
+**PowerShell PID 3728:** Investigation notes connected this process context to a sequence of file and network operations consistent with possible data collection and exfiltration.
+
+The strongest conclusion was not that every PowerShell event represented a separate compromise, but that the observed activity warranted further investigation as a potentially connected incident.
+
+The following sections examine the financial network-share access, file collection, and suspected exfiltration activity associated with the investigation.
