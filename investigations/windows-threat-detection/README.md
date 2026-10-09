@@ -179,6 +179,10 @@ Process-creation evidence was particularly useful because it helped establish th
 
 The process evidence also provided a starting point for investigating subsequent network activity.
 
+![Suspicious executable process creation](evidence/03-phishing-executable-execution.png)
+
+*Figure 3 — Sysmon Event ID 1 showing execution of `C:\Users\Administrator\Pictures\best-cat.jpg.exe` (PID 5484), a double-extension executable associated with the simulated phishing scenario.*
+
 #### DNS Activity
 
 Additional Sysmon telemetry recorded DNS-related activity associated with the suspicious executable.
@@ -188,6 +192,10 @@ Correlating the executable with its DNS queries helped establish the relationshi
 A DNS query alone does not prove that a remote connection was successfully established or that command-and-control traffic was exchanged.
 
 However, unexpected DNS activity originating from a suspicious executable provides an important indicator for further investigation.
+
+![Suspicious executable DNS query](evidence/04-phishing-executable-dns.png)
+
+*Figure 4 — Sysmon Event ID 22 recording a DNS query for `rj.store` from `best-cat.jpg.exe` (PID 5484). QueryStatus 9003 indicates the name was not resolved.*
 
 #### Analyst Assessment
 
