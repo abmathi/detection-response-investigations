@@ -289,3 +289,78 @@ The original investigation notes reference DNS activity and encoded-looking quer
 Consequently, this section is supported by the analyst's recorded observations rather than a directly embedded DNS screenshot.
 
 The report does not claim that the specific DNS payload was decoded or that the contents of the queries were conclusively identified as exfiltrated financial data.
+
+## Alert Classification and Investigation Outcome
+
+### True-Positive and False-Positive Assessment
+
+Throughout the simulation, alerts were investigated and classified according to the supporting evidence.
+
+The objective was to distinguish legitimate activity from events requiring further security investigation.
+
+For suspicious detections, the assessment considered:
+
+- Whether the process behavior aligned with expected administrative activity.
+- Whether multiple alerts involved a common endpoint or process context.
+- Whether file operations indicated unauthorized collection or staging.
+- Whether external communication was consistent with the surrounding endpoint activity.
+- Whether independent evidence supported the suspected security event.
+
+The classification process emphasized correlating behavior rather than relying on individual alert names or suspicious tools alone.
+
+### Correlated Incident Assessment
+
+The investigation identified several behaviors that collectively warranted a true-positive assessment:
+
+| Investigative Finding | Assessment |
+| --- | --- |
+| Unexpected PowerView script creation | Suspicious reconnaissance preparation; execution not independently confirmed |
+| PowerShell-associated financial-share access | Suspicious in the context of related alerts |
+| Robocopy activity involving financial records | Potential unauthorized data collection |
+| Local staging and archive preparation | Consistent with potential data packaging |
+| Repeated DNS queries with encoded-looking content | Suspected DNS-based exfiltration |
+| Powercat activity involving an external relay | Potential unauthorized remote communication |
+
+These findings supported treating the related activity as a potential intrusion rather than a collection of unrelated administrative events.
+
+### Final Alert Classification
+
+During the final stage of the simulation, multiple true-positive alerts appeared together.
+
+The simulator allowed these alerts to be classified in one action, and completing that classification concluded the exercise.
+
+As a result, the individual final alerts were not captured in separate screenshots.
+
+The investigation therefore does not assign specific unpreserved alerts to individual processes or claim additional forensic findings from those final classifications.
+
+### Simulation Results
+
+The simulator reported the following performance metrics:
+
+| Metric | Reported Result |
+| --- | --- |
+| True-positive identification | 100% |
+| False-positive identification | 95% |
+| Alerts closed | 35 |
+| Mean time to resolve | 1 minute |
+| Mean dwell time | 7 minutes |
+
+![SOC simulator investigation results](evidence/05-simulation-results.png)
+
+*Figure 5 — Final SOC Simulator performance summary showing alert-classification accuracy and response metrics.*
+
+These results reflect performance within the simulated exercise, not operational measurements from a production SOC.
+
+The true-positive identification result indicates that the simulator credited the classification of its true-positive alerts. It does not independently establish that every individual alert was supported by a separately preserved forensic investigation.
+
+### Investigation Outcome
+
+The investigation concluded with the classification of the simulation's alert queue.
+
+The strongest finding was a correlated sequence of suspicious PowerShell activity, access to financial records, possible file collection and staging, and network behavior consistent with suspected exfiltration.
+
+The combined observations warranted escalation for potential unauthorized access and data loss.
+
+However, the preserved evidence did not establish successful external receipt of the financial records, nor did the simulator provide a documented record of production containment or remediation actions.
+
+The final disposition was therefore an evidence-based suspicious-activity assessment within a completed SOC simulation, rather than a claim that a real-world incident had been fully contained and eradicated.
