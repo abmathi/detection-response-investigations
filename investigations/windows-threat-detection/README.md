@@ -158,3 +158,49 @@ A useful SOC detection strategy would include:
 - Investigation of unexpected RDP access from unfamiliar sources or outside approved access windows.
 
 These detections should account for legitimate administrative activity and authentication misconfigurations to minimize false positives.
+
+### Scenario 2 — Phishing-Related Executable Execution
+
+#### Investigation Context
+
+The second scenario involved suspicious executable activity associated with a phishing-related initial-access attempt.
+
+The investigation used Windows endpoint telemetry to examine how the executable was launched and whether subsequent behavior suggested malicious activity.
+
+The focus was on correlating process execution with network indicators rather than treating the executable's presence as proof of compromise.
+
+#### Suspicious Process Execution
+
+Sysmon process telemetry identified executable activity associated with the suspected phishing scenario.
+
+The investigation examined the executable's path, process context, and available command-line information to determine whether the behavior was consistent with legitimate user activity.
+
+Process-creation evidence was particularly useful because it helped establish that the suspicious file was executed, rather than merely downloaded or stored.
+
+The process evidence also provided a starting point for investigating subsequent network activity.
+
+#### DNS Activity
+
+Additional Sysmon telemetry recorded DNS-related activity associated with the suspicious executable.
+
+Correlating the executable with its DNS queries helped establish the relationship between local process execution and attempted external communication.
+
+A DNS query alone does not prove that a remote connection was successfully established or that command-and-control traffic was exchanged.
+
+However, unexpected DNS activity originating from a suspicious executable provides an important indicator for further investigation.
+
+#### Analyst Assessment
+
+The combination of suspicious executable activity and associated DNS queries was consistent with possible malware execution following a phishing-related initial-access attempt.
+
+**Assessment:** Suspicious execution and external communication requiring investigation.
+
+The evidence supported the presence of process and DNS activity, but did not independently establish successful command-and-control communication or the full impact of the executable.
+
+#### Detection Opportunities
+
+- Alert on suspicious executables launched from user-writable locations.
+- Correlate unusual process execution with subsequent DNS activity.
+- Investigate unexpected executables associated with phishing-related alerts.
+- Review parent-child process relationships and execution paths.
+- Prioritize processes contacting unusual external domains shortly after execution.
