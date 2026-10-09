@@ -88,3 +88,73 @@ The following sections examine:
 4. Persistence through local accounts, services, and scheduled tasks.
 
 Each scenario is evaluated independently, with cross-scenario observations reserved for the final detection and defensive-analysis sections.
+
+## Initial Access Detection
+
+### Scenario 1 — Suspicious RDP Authentication
+
+#### Investigation Context
+
+The first scenario involved Windows Remote Desktop Protocol (RDP) authentication activity consistent with a password-guessing attack.
+
+Windows Security logs contained **1,567 failed logon events**, including **1,018 targeting the `ADMINISTRATOR` account**.
+
+The concentration of authentication failures against a privileged account was a significant indicator of potentially automated password guessing.
+
+The investigation focused on identifying the authentication pattern, determining whether any attempts succeeded, and assessing the implications of subsequent remote access.
+
+#### Failed Authentication Analysis
+
+Windows Security Event ID `4625` records a failed logon attempt.
+
+The investigation examined repeated failures and the accounts targeted to understand whether the activity resembled ordinary user error or a coordinated attempt to obtain access.
+
+| Observation | Investigative Significance |
+| --- | --- |
+| 1,567 failed logon events | High volume of unsuccessful authentication activity |
+| 1,018 failures targeting `ADMINISTRATOR` | Concentration of activity against a privileged account |
+| Repeated authentication attempts | Pattern consistent with password guessing or brute-force activity |
+
+![Failed RDP authentication analysis](evidence/01-rdp-failed-authentication.png)
+
+*Figure 1 — PowerShell aggregation of Windows Security Event ID 4625, showing repeated failed logons targeting administrative and common usernames.*
+
+The number of failed logons alone did not establish the attacker's identity or prove that all attempts originated from one source.
+
+Source addresses, timestamps, logon types, and account names would be useful fields for validating the pattern and distinguishing brute-force attempts from password spraying or other authentication failures.
+
+#### Successful RDP Authentication
+
+Additional Windows Security telemetry identified Event ID `4624`, which records a successful logon.
+
+The observed event included **Logon Type `10`**, indicating a RemoteInteractive logon associated with Remote Desktop Services.
+
+![Successful RDP authentication](evidence/02-rdp-successful-logon.png)
+
+*Figure 2 — Windows Security Event ID 4624 confirming an Administrator RemoteInteractive logon from 203.205.34.107.*
+
+This was an important finding because the investigation contained both unsuccessful authentication attempts and evidence of a successful remote logon.
+
+A successful RDP logon following repeated failures warrants investigation for potential account compromise.
+
+However, a successful logon event does not independently prove that the same actor responsible for the failed attempts obtained access. That relationship requires correlation of account details, source addresses, timestamps, and session context.
+
+#### Analyst Assessment
+
+The combination of high-volume authentication failures, targeting of a privileged account, and successful RDP authentication was consistent with a potential credential-based initial-access incident.
+
+**Assessment:** Suspicious RDP authentication activity requiring investigation for possible unauthorized access.
+
+The evidence supported repeated failed logons and a successful remote-interactive session. Attribution of the successful session to the preceding password-guessing activity would require additional correlation.
+
+#### Detection Opportunities
+
+A useful SOC detection strategy would include:
+
+- Threshold-based alerting on repeated Event ID `4625` failures within a defined period.
+- Separate monitoring for high-volume authentication failures targeting privileged accounts.
+- Correlation of multiple failed logons followed by Event ID `4624` with Logon Type `10`.
+- Comparison of source addresses, account names, and host context to determine whether authentication attempts were related.
+- Investigation of unexpected RDP access from unfamiliar sources or outside approved access windows.
+
+These detections should account for legitimate administrative activity and authentication misconfigurations to minimize false positives.
