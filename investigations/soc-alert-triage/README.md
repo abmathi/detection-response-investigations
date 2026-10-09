@@ -161,3 +161,63 @@ The evidence supported two separate observations.
 The strongest conclusion was not that every PowerShell event represented a separate compromise, but that the observed activity warranted further investigation as a potentially connected incident.
 
 The following sections examine the financial network-share access, file collection, and suspected exfiltration activity associated with the investigation.
+
+## Financial Network Share Access and Data Collection
+
+### Suspicious Network Share Access
+
+The investigation identified activity involving a network share containing financial records.
+
+Process evidence showed `net.exe` being used to map a network drive on the Windows endpoint `win-3450`.
+
+Drive mapping is a legitimate administrative capability, but its appearance alongside suspicious PowerShell activity and subsequent file-copy operations warranted additional investigation.
+
+![Financial network share access](evidence/03-financial-share-access.png)
+
+*Figure 3 — Endpoint process evidence showing `net.exe` drive-mapping activity associated with access to a financial records network share.*
+
+The network-share activity was significant because it provided a potential path for accessing data outside the compromised endpoint.
+
+The observed command helped establish the intended resource and access method. However, process-creation telemetry alone did not confirm that the mapped drive was successfully established or that every file in the share was accessible.
+
+### Financial Records Collection
+
+Additional evidence showed `Robocopy.exe` activity involving the financial records share.
+
+Robocopy is a legitimate Windows file-copy utility commonly used for backup, migration, and administrative operations.
+
+In this investigation, its significance came from the surrounding activity: suspicious PowerShell execution, network-share mapping, and later observations involving data staging and potential exfiltration.
+
+![Robocopy financial records activity](evidence/04-financial-records-collection.png)
+
+*Figure 4 — Process evidence showing Robocopy activity involving the financial records network share during the suspicious PowerShell investigation.*
+
+The Robocopy command was consistent with an attempt to collect or copy financial files.
+
+The preserved screenshot established the execution of file-copy tooling, but did not independently verify the number of files successfully transferred or the total volume of data collected.
+
+### Local Data Staging
+
+The investigation notes also associated PowerShell PID `3728` with the creation of a local staging directory and subsequent ZIP archive preparation.
+
+These activities were considered alongside the network-share access and Robocopy execution.
+
+The resulting sequence suggested an attempt to consolidate information before transferring it elsewhere:
+
+1. Prepare a local directory for collected data.
+2. Access the financial records network share.
+3. Execute Robocopy against the financial records.
+4. Prepare an archive potentially containing collected material.
+5. Initiate additional network activity requiring exfiltration analysis.
+
+This represents an investigative reconstruction based on the preserved notes and screenshots, not independent proof that every stage successfully completed.
+
+### Analyst Assessment
+
+The combined activity was suspicious because multiple data-access and collection behaviors occurred within the same broader PowerShell investigation.
+
+A network drive-mapping command or Robocopy execution would not ordinarily justify a malicious classification on its own.
+
+However, their appearance alongside suspected attacker-controlled PowerShell activity, local staging, and later unusual DNS requests supported escalation for possible unauthorized data collection.
+
+**Finding:** The preserved evidence supported suspected financial-data collection and staging activity, but did not independently establish the complete contents or quantity of files successfully collected.
