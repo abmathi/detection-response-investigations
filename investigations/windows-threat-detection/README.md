@@ -313,6 +313,10 @@ Instead of treating individual commands as unrelated events, the investigation e
 
 The process ancestry was important because legitimate Windows discovery commands can become suspicious when launched by an unexpected executable masquerading as a document.
 
+![Suspicious invoice executable](evidence/08-invoice-executable.png)
+
+*Figure 8 — Sysmon Event ID 1 showing `invoice.pdf.exe` (PID 1492) launched from Windows Explorer.*
+
 #### System Discovery
 
 The observed child-process activity included commands used to gather information about the Windows environment.
@@ -320,6 +324,22 @@ The observed child-process activity included commands used to gather information
 The investigation examined the commands in the context of their parent process to assess whether the behavior was consistent with normal administration or attacker reconnaissance.
 
 These observations supported an assessment of suspicious system discovery following execution of the apparent invoice attachment.
+
+The process tree revealed that `invoice.pdf.exe` launched `whoami.exe` to identify the current user context.
+
+![User discovery from suspicious executable](evidence/09-invoice-user-discovery.png)
+
+*Figure 9 — Sysmon Event ID 1 showing `whoami.exe` (PID 6104) with `invoice.pdf.exe` (PID 1492) as its parent process.*
+
+Further process evidence identified a security-product discovery command:
+
+`cmd /c "tasklist /v | findstr csfalconservice.exe || echo No CrowdStrike EDR"`
+
+This command searched the running process list for the CrowdStrike Falcon sensor service process. Its execution demonstrated an attempt to identify installed endpoint security tooling.
+
+![Endpoint security product discovery](evidence/10-invoice-security-tool-discovery.png)
+
+*Figure 10 — Sysmon Event ID 1 showing `cmd.exe` launched by `invoice.pdf.exe` to check for the CrowdStrike Falcon sensor process.*
 
 #### Analyst Assessment
 
