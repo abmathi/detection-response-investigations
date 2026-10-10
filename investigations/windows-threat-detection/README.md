@@ -698,3 +698,153 @@ The task configuration indicated intended execution at boot, but the preserved e
 - Alert on unexpected tasks configured to execute at system startup.
 - Investigate task actions referencing suspicious or user-writable executable paths.
 - Correlate scheduled-task creation with preceding malicious execution or privilege changes.
+
+## Detection Opportunities
+
+The nine investigations identified recurring Windows behaviors that could be monitored through endpoint telemetry and centralized security logging.
+
+The strongest detection opportunities involve correlating related events rather than treating individual commands or executables as inherently malicious.
+
+| Detection Use Case | Suggested Detection Logic | Relevant Telemetry |
+| --- | --- | --- |
+| RDP password guessing | Detect repeated failed logons targeting privileged accounts and correlate with subsequent successful RemoteInteractive logons | Security Event IDs `4625`, `4624`; Logon Type `10` |
+| Suspicious executable execution | Identify document-like double-extension executables and unusual execution paths | Sysmon Event ID `1` |
+| Process-to-DNS correlation | Link suspicious process execution with unexpected DNS queries using process identifiers and host context | Sysmon Event IDs `1`, `22` |
+| Removable-media malware | Detect executables launched from removable drives that subsequently create additional executable files | Sysmon Event IDs `1`, `11` |
+| Suspicious system discovery | Correlate unexpected executables with child processes executing `whoami`, `tasklist`, or security-product discovery commands | Sysmon Event ID `1` |
+| Data staging and clipboard collection | Identify suspicious staging-directory creation followed by clipboard access | Sysmon Event ID `1`, PowerShell logging |
+| Potential exfiltration | Correlate collection activity with DNS requests involving external storage destinations | Sysmon Event ID `22`, DNS and network telemetry |
+| Unauthorized accounts | Alert on unexpected account creation followed by addition to the local Administrators group | Security Event IDs `4720`, `4732` |
+| Service persistence | Detect newly installed automatically starting services with suspicious executable paths | System Event ID `7045`, service configuration |
+| Scheduled-task persistence | Detect unexpected boot-triggered scheduled tasks | Security Event ID `4698` where enabled; Task Scheduler logs |
+
+### Recommended Correlation Rules
+
+Three particularly valuable detection patterns emerged from the investigations.
+
+**1. Failed authentication followed by successful RDP access**
+
+Identify repeated Event ID `4625` failures targeting a privileged account, followed by Event ID `4624` with Logon Type `10`.
+
+The correlation should evaluate usernames, source addresses, destination hosts, and event timing before attributing the successful session to the preceding failures.
+
+**2. Suspicious execution followed by discovery or communication**
+
+Identify an unexpected executable launching discovery utilities such as `whoami.exe` or `cmd.exe`, then correlate the process tree with subsequent DNS activity.
+
+This can distinguish legitimate administrative tools from suspicious activity initiated by an untrusted executable.
+
+**3. Unauthorized account creation followed by privilege assignment**
+
+Correlate Event ID `4720` with a subsequent Event ID `4732` involving the same newly created account and the built-in Administrators group.
+
+This pattern can provide a high-value alert for potential account-based persistence.
+
+These are proposed defensive detections based on the investigation findings. They were not implemented or validated as production detection rules during these scenarios.
+
+---
+
+## MITRE ATT&CK Mapping
+
+The following ATT&CK techniques were selected to classify the suspicious behaviors observed across the nine independent scenarios.
+
+| Scenario | MITRE ATT&CK Technique | ID | Evidence |
+| --- | --- | --- | --- |
+| RDP authentication | Brute Force | `T1110` | High-volume failed authentication attempts targeting privileged accounts |
+| RDP authentication | External Remote Services | `T1133` | Successful RemoteInteractive logon in the context of suspicious RDP activity |
+| Phishing execution | User Execution: Malicious File | `T1204.002` | Execution of `best-cat.jpg.exe` during the simulated phishing scenario |
+| USB infection | Replication Through Removable Media | `T1091` | USB-originating executable creating another drive-themed executable on separate removable media |
+| System discovery | System Owner/User Discovery | `T1033` | `whoami.exe` launched by `invoice.pdf.exe` |
+| Security-tool discovery | Software Discovery: Security Software Discovery | `T1518.001` | Command checking for the CrowdStrike Falcon sensor process |
+| Collection | Data Staged | `T1074` | Creation of a temporary staging directory associated with `stealer.exe` |
+| Collection | Clipboard Data | `T1115` | PowerShell `Get-Clipboard` activity |
+| Payload delivery | Ingress Tool Transfer | `T1105` | PowerShell downloading `update.exe` |
+| Account persistence | Create Account: Local Account | `T1136.001` | Security Event ID `4720` confirming account creation |
+| Privileged access | Account Manipulation: Additional Local or Domain Groups | `T1098.007` | Security Event ID `4732` recording privileged-group membership |
+| Service persistence | Create or Modify System Process: Windows Service | `T1543.003` | Suspicious automatically starting service configuration |
+| Scheduled-task persistence | Scheduled Task/Job: Scheduled Task | `T1053.005` | Boot-triggered scheduled-task configuration |
+
+### Mapping Considerations
+
+These techniques were mapped to observed behaviors within separate simulations. They do not represent a single attacker campaign.
+
+Some scenarios support a technique more directly than others. For example, Windows Security events confirmed account-management changes, while DNS events alone did not confirm successful C2 communication or exfiltration.
+
+Similarly, service and scheduled-task configurations established persistence mechanisms without independently confirming that their payloads executed after a restart.
+
+The ATT&CK mappings describe relevant behaviors and plausible attacker objectives, not proof that every objective was achieved.
+
+---
+
+## Evidence Limitations
+
+The investigation was reconstructed from preserved Windows Security events, Sysmon telemetry, command-line evidence, and screenshots collected across nine simulated scenarios.
+
+| Investigation | Confirmed Observation | Evidence Limitation |
+| --- | --- | --- |
+| RDP authentication | Repeated failed logons and a successful RemoteInteractive logon | Successful access was not independently attributed to the actor responsible for failed attempts |
+| Phishing executable | Suspicious executable launched and generated a DNS query | DNS name error did not establish successful C2 connectivity |
+| Removable media | USB executable launched and created additional executable files | Subsequent execution of the newly created files was not confirmed |
+| System discovery | `invoice.pdf.exe` launched discovery commands | Resulting system knowledge and later attacker actions were not established |
+| Data collection | Staging and clipboard-access commands executed | Contents of collected information and successful exfiltration were not confirmed |
+| Payload delivery | PowerShell-associated `update.exe` execution and DNS activity | DNS failure did not establish a successful external session |
+| Backdoor account | Account creation and privileged-group membership were recorded | Subsequent authentication using the account was not confirmed |
+| Windows service | Automatically starting service configuration was observed | Payload execution following a restart was not established |
+| Scheduled task | Boot-triggered task configuration was observed | Successful execution at the next system startup was not confirmed |
+
+### Analytical Standard
+
+The investigations distinguished commands attempting an operation from telemetry confirming an outcome.
+
+For example:
+
+- Process creation establishes that a command or executable ran, not that every intended operation succeeded.
+- Sysmon DNS events establish query activity, not necessarily successful external communication.
+- File-creation events establish that files were written, not that those files later executed.
+- Windows Security account-management events provide stronger confirmation of completed account changes.
+
+These limitations were retained to ensure that conclusions remained grounded in observable evidence.
+
+---
+
+## Skills Demonstrated
+
+**Windows Security Monitoring**
+- Windows Security event analysis
+- Sysmon process, file, and DNS telemetry
+- RDP authentication investigation
+- Account-management and privileged-group auditing
+
+**Endpoint Threat Investigation**
+- Process ancestry and command-line analysis
+- Suspicious executable identification
+- Removable-media malware investigation
+- System and security-product discovery
+
+**Collection and Exfiltration Analysis**
+- Data staging indicators
+- PowerShell clipboard collection
+- Suspicious external storage destinations
+- Process-to-DNS correlation
+
+**Persistence Investigation**
+- Unauthorized local account creation
+- Local Administrators group membership
+- Windows service persistence
+- Scheduled-task persistence
+
+**SOC Detection and Reporting**
+- Behavioral detection design
+- Event correlation
+- MITRE ATT&CK mapping
+- Evidence validation
+- Technical investigation documentation
+
+### Investigation Takeaway
+
+The strongest finding across these independent scenarios was the value of correlating Windows events to understand the behavior behind an alert.
+
+A single process, DNS query, or authentication event may be insufficient to establish malicious activity. Process relationships, command-line arguments, event identifiers, and configuration changes provide additional context that allows an analyst to make a more defensible assessment.
+
+The investigations demonstrate how Windows Security and Sysmon telemetry can support detection of initial access, discovery, collection, command-and-control preparation, and persistence.
+
