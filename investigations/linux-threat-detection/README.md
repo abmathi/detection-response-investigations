@@ -658,3 +658,159 @@ The preserved evidence did not independently establish that every configured per
 - Correlate persistence-related changes with earlier suspicious root sessions and command execution.
 - Validate suspicious service, cron, account, and SSH-key configuration changes during incident response.
 - Review multiple persistence locations before considering a compromised host remediated.
+
+## Detection Opportunities
+
+The six investigations identified several behaviors that could be monitored through Linux authentication logs, web server logs, auditd telemetry, and system configuration monitoring.
+
+The strongest detection opportunities involve correlating related events rather than treating individual commands as inherently malicious.
+
+| Detection Use Case | Suggested Detection Logic | Relevant Telemetry |
+| --- | --- | --- |
+| SSH password guessing | Identify repeated failed SSH authentication attempts, particularly those targeting privileged accounts | SSH authentication logs |
+| Suspicious root authentication | Correlate failed SSH attempts with subsequent successful root authentication, considering source IP and timing | SSH authentication logs |
+| Web command injection | Detect suspicious HTTP parameters followed by shell processes launched by the web application | Nginx access logs, auditd |
+| Reverse-shell execution | Identify unexpected execution of `socat` or scripting interpreters with remote connection behavior | auditd process telemetry, network logs |
+| Automated system discovery | Correlate multiple discovery commands originating from a common shell script or process tree | auditd `EXECVE` and `PROCTITLE` records |
+| Security-tool discovery | Detect unexpected enumeration of security processes such as Falcon, Sentinel, or `ds_agent` | auditd process telemetry |
+| Suspicious payload staging | Monitor executable extraction or creation under unusual temporary directories such as `/tmp/.apt` | auditd, filesystem monitoring |
+| Internal SSH reconnaissance | Detect rapid connection attempts to TCP port `22` across multiple internal destinations | Network telemetry, process command lines |
+| Suspected cryptominer execution | Identify unfamiliar executables launched from temporary directories and correlate with unusual resource consumption | auditd, process monitoring, host performance telemetry |
+| Privilege escalation | Monitor unexpected `su root` activity, especially following suspicious service-account execution | Authentication logs, auditd UID/EUID |
+| Systemd persistence | Detect unauthorized service-file creation or modification and suspicious service startup configurations | Filesystem monitoring, systemd logs |
+| Cron persistence | Monitor unexpected cron changes, particularly `@reboot` entries launching unfamiliar executables | Cron files, auditd, filesystem monitoring |
+| Privileged-account persistence | Alert on unexpected account creation and privileged group modifications | Account-management logs, `/etc/passwd`, `/etc/group` |
+| SSH-key persistence | Detect unauthorized modifications to root or other privileged users' `authorized_keys` files | auditd, filesystem integrity monitoring |
+
+### Recommended Correlation Rules
+
+Three particularly valuable detection patterns emerged from the investigations.
+
+**1. Suspicious SSH authentication followed by privileged access**
+
+Identify repeated failed authentication attempts targeting privileged accounts, followed by a successful SSH login.
+
+Correlate the source IP address, destination host, username, and event timestamps before concluding that the successful login was related to the preceding failures.
+
+**2. Web application command execution**
+
+Identify HTTP requests containing suspicious command separators or shell syntax, followed by shell or interpreter execution from the corresponding web application process.
+
+This correlation is stronger than detecting suspicious request strings alone because it connects an attempted injection to endpoint execution evidence.
+
+**3. Privileged session followed by payload deployment or persistence**
+
+Identify unexpected root authentication or privilege escalation followed by executable staging, service creation, cron modification, local-account changes, or SSH authorized-key writes.
+
+The combination can indicate broader host compromise and is generally more significant than any individual configuration change.
+
+These are proposed defensive detections based on the investigation findings. They were not implemented or validated as production detection rules during the training scenarios.
+
+---
+
+## MITRE ATT&CK Mapping
+
+The following ATT&CK techniques classify suspicious behaviors observed across the six independent investigations.
+
+| Scenario | MITRE ATT&CK Technique | ID | Supporting Evidence |
+| --- | --- | --- | --- |
+| SSH authentication | Brute Force | `T1110` | Repeated failed SSH password attempts targeting privileged and other accounts |
+| SSH access | External Remote Services | `T1133` | Successful SSH access from external source addresses |
+| Web exploitation | Exploit Public-Facing Application | `T1190` | TryPingMe command injection supported by HTTP request and auditd execution evidence |
+| Web command execution | Command and Scripting Interpreter: Unix Shell | `T1059.004` | Injected commands executed through `/bin/sh` |
+| Reverse-shell activity | Command and Scripting Interpreter: Unix Shell | `T1059.004` | `socat` launching a shell through its `EXEC` configuration |
+| System discovery | System Information Discovery | `T1082` | `hostname`, `uname`, CPU, memory, and filesystem discovery |
+| Process discovery | Process Discovery | `T1057` | `ps` process enumeration |
+| Security-tool discovery | Software Discovery: Security Software Discovery | `T1518.001` | Checks for Falcon, Sentinel, and `ds_agent` |
+| Payload staging | Ingress Tool Transfer | `T1105` | **Potential** technique; payload extraction was observed, but the original transfer into the host was not established |
+| Internal reconnaissance | Network Service Discovery | `T1046` | `nc` scanning internal IP addresses on TCP port `22` |
+| Credential search | Unsecured Credentials: Credentials in Files | `T1552.001` | Commands searching files for `key` and `pass` |
+| Privilege escalation | Valid Accounts: Local Accounts | `T1078.003` | `su root` followed by confirmed root UID/EUID execution |
+| Systemd persistence | Create or Modify System Process: Systemd Service | `T1543.002` | Suspicious `tux.service` configuration |
+| Cron persistence | Scheduled Task/Job: Cron | `T1053.003` | `@reboot /usr/sbin/phoenix` |
+| Account persistence | Create Account: Local Account | `T1136.001` | Activity involving creation of `koichi` |
+| Privileged-account changes | Account Manipulation: Additional Local or Domain Groups | `T1098.007` | Privileged group-membership activity involving `koichi` |
+| SSH-key persistence | Account Manipulation: SSH Authorized Keys | `T1098.004` | Activity modifying `/root/.ssh/authorized_keys` |
+
+### Mapping Considerations
+
+These technique mappings describe behaviors from separate simulated scenarios, not one continuous attacker campaign.
+
+The evidence supports some techniques more directly than others.
+
+For example, auditd established successful execution of injected commands, while suspicious SSH authentication supported a credential-attack assessment without revealing exactly how the correct password was obtained.
+
+Similarly, execution commands involving `kernupd` supported suspicious payload activity but did not independently establish sustained cryptocurrency mining.
+
+The `T1105` mapping is a candidate because the evidence showed payload extraction from an archive, not how that archive originally reached the endpoint.
+
+ATT&CK mappings were selected to describe relevant attacker behaviors and plausible objectives, not to imply that every attacker objective succeeded.
+
+---
+
+## Evidence Limitations
+
+The investigations were reconstructed from preserved Linux authentication logs, Nginx access logs, auditd telemetry, and screenshots collected across three training rooms.
+
+| Investigation | Confirmed Observation | Evidence Limitation |
+| --- | --- | --- |
+| SSH authentication | Failed SSH attempts and successful root authentication | Correct-password acquisition method was not established |
+| TryPingMe command injection | Suspicious HTTP requests and successful injected-command execution | Full reverse-shell command and successful interactive session were not independently confirmed |
+| Script-based discovery | `debug.sh` initiated system and resource enumeration | Commands did not independently establish malicious intent |
+| Cryptominer activity | Root SSH authentication, discovery, staging commands, internal scanning, and `kernupd` launch command | Successful lateral movement, sustained mining activity, and mining-pool communication were not confirmed |
+| Reverse shell and escalation | `socat` execution, credential searching, and a confirmed root shell | Original credential-acquisition method and full remote-session details were not established |
+| Persistence | systemd, cron, account-management, and authorized-key activity | Successful post-reboot execution or later use of every mechanism was not confirmed |
+
+### Analytical Standard
+
+The investigations distinguished observed activity from confirmed outcomes.
+
+- Authentication logs can confirm successful login without establishing the complete method of credential acquisition.
+- Web access logs demonstrate HTTP requests, while auditd process records provide stronger evidence of operating-system command execution.
+- Process records can confirm command execution without proving that network connections succeeded.
+- UID and EUID evidence can establish execution under elevated privileges.
+- Configuration changes can indicate persistence mechanisms without proving subsequent use.
+- An executable's name or scenario description does not replace behavioral or binary analysis.
+
+These limitations ensure that the report's conclusions remain grounded in the available evidence.
+
+---
+
+## Skills Demonstrated
+
+**Linux Security Monitoring**
+- SSH authentication-log analysis
+- Nginx access-log investigation
+- auditd `EXECVE` and `PROCTITLE` analysis
+- User identity and privilege-context interpretation
+
+**Threat Investigation**
+- Process ancestry reconstruction
+- Command-injection investigation
+- Reverse-shell detection
+- System and security-software discovery
+- Suspicious payload staging and execution
+- Internal network reconnaissance
+
+**Privilege Escalation and Persistence**
+- Credential-discovery analysis
+- `su` and root-shell investigation
+- systemd service persistence
+- Cron-based persistence
+- Privileged-account investigation
+- SSH authorized-key monitoring
+
+**SOC Detection and Reporting**
+- Cross-source event correlation
+- Behavioral detection design
+- MITRE ATT&CK mapping
+- Evidence validation
+- Technical investigation documentation
+
+### Investigation Takeaway
+
+The strongest lesson across these Linux investigations was the importance of correlating authentication, web, process, and system-configuration evidence.
+
+An individual SSH login, HTTP request, shell command, or configuration change may not establish an intrusion by itself. Correlating related observations can reveal suspicious execution chains, privilege transitions, and attempts to maintain access.
+
+The investigations demonstrate how Linux telemetry can support detection and investigation of initial access, command execution, reconnaissance, privilege escalation, and persistence.
