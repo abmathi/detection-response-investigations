@@ -194,6 +194,10 @@ The request content was consistent with an attempt to cause the application to e
 
 The HTTP logs established that the requests reached the web server, but did not independently prove successful exploitation.
 
+![TryPingMe command-injection request](evidence/03-trypingme-command-injection.png)
+
+*Figure 3 — Nginx access log showing a request to `/ping` with the injected `;cat /opt/trypingme/main.py` command in the `host` parameter. The HTTP response returned status 200.*
+
 #### Confirmed Command Execution
 
 Linux auditd telemetry provided additional visibility into process execution occurring after the suspicious requests.
@@ -202,6 +206,17 @@ The audit records associated attacker-supplied commands with processes launched 
 
 This correlation supported an assessment that the command injection resulted in operating-system command execution, rather than remaining an unsuccessful request.
 
+auditd recorded successful execution of `/usr/bin/whoami`
+following a shell invocation containing injected command syntax.
+
+The recorded shell command included:
+
+`ping -c 2 ;whoami`
+
+![auditd command execution](evidence/04-auditd-command-execution.png)
+
+*Figure 4 — auditd execution records showing `/bin/sh -c` invoking the injected `whoami` command, with successful execution recorded for `/usr/bin/whoami`.*
+
 #### Reverse-Shell Activity
 
 The investigation also identified Python command execution associated with reverse-shell behavior.
@@ -209,6 +224,26 @@ The investigation also identified Python command execution associated with rever
 The preserved command evidence was truncated, limiting reconstruction of the complete Python command and its connection parameters.
 
 The available evidence supported suspicious Python execution consistent with reverse-shell preparation or attempted execution. It did not independently confirm that a remote interactive session was successfully established.
+
+Further auditd process records revealed commands executed
+through the web application's shell context, including:
+
+- `whoami`
+- `ls`
+- `pwd`
+- `cat /opt/trypingme/main.py`
+- A Python command importing `socket`, `subprocess`, and `os`
+
+The Python command began constructing a TCP socket and
+initiating a connection, consistent with reverse-shell behavior.
+
+![auditd reverse shell activity](evidence/05-auditd-reverse-shell-attempt.png)
+
+*Figure 5 — auditd process records showing injected shell commands followed by a truncated Python command consistent with an attempted reverse shell.*
+
+The Python command was truncated in the preserved evidence.
+The full remote destination, completed payload, and successful
+establishment of a reverse-shell session could not be verified.
 
 #### Analyst Assessment
 
