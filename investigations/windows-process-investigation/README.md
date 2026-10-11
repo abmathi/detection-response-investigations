@@ -193,3 +193,57 @@ The finding should therefore be treated as an identity anomaly requiring additio
 - Review Windows Security Event ID `4720` where available to identify account creation.
 - Monitor unexpected discovery commands performed by previously unseen accounts.
 - Investigate account privileges, group memberships, and subsequent activity before determining severity.
+
+### Finding 3 — Suspicious Scheduled-Task Persistence
+
+#### Investigation Context
+
+The investigation identified suspicious `schtasks.exe` execution associated with the Windows account `Chris.fort` on endpoint `HR_02`.
+
+The process event was recorded on March 6, 2022, and contained command-line arguments indicating an attempt to create a scheduled task configured to launch an executable at system startup.
+
+The investigation focused on identifying the requested task configuration and determining whether the available telemetry confirmed persistent execution.
+
+#### Process and Command-Line Analysis
+
+Windows Security Event ID `4688` recorded execution of `schtasks.exe`.
+
+The command attempted to create a scheduled task named `OfficUpdater` that referenced an executable named `update.exe` in the user's temporary directory.
+
+| Indicator | Observed Value |
+| --- | --- |
+| User | `Chris.fort` |
+| Endpoint | `HR_02` |
+| Date | March 6, 2022 |
+| Process | `schtasks.exe` |
+| Task name | `OfficUpdater` |
+| Target executable | `update.exe` |
+| Target location | User Temp directory |
+| Requested trigger | System startup |
+
+![Suspicious scheduled-task creation command](evidence/02-scheduled-task-creation-command.png)
+
+*Figure 2 — Splunk Windows Security Event ID 4688 showing `schtasks.exe` activity associated with `Chris.fort` on `HR_02`, attempting to create the `OfficUpdater` startup task.*
+
+The task name resembled legitimate office software maintenance activity, while the executable's temporary-directory location was unusual for a trusted updater.
+
+The combination of a software-update-themed task name, startup trigger, and executable in a user-writable location was consistent with an attempted persistence mechanism.
+
+#### Analyst Assessment
+
+**Assessment: Suspicious scheduled-task creation command consistent with attempted persistence.**
+
+The preserved process telemetry confirmed that `schtasks.exe` was launched with arguments requesting scheduled-task creation.
+
+However, Event ID `4688` records process creation, not the success or failure of the task-registration operation.
+
+The investigation did not independently establish that `OfficUpdater` was successfully registered, executed at startup, or launched `update.exe`.
+
+#### Detection Opportunities
+
+- Monitor `schtasks.exe` execution containing task-creation arguments.
+- Investigate newly created tasks configured to execute at startup or user logon.
+- Alert on scheduled tasks referencing executables in user-writable directories.
+- Correlate suspicious process creation with Windows Security Event ID `4698`, where task-creation auditing is enabled.
+- Review Task Scheduler Operational logs and task definitions to validate registration and execution.
+- Investigate task names that imitate legitimate software or operating-system components.
