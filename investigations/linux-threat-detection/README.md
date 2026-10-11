@@ -347,6 +347,10 @@ This established that the system accepted a privileged remote session. The surro
 
 The successful authentication event was therefore treated as the confirmed access point for further investigation rather than definitive proof of the initial credential-acquisition method.
 
+![Successful root SSH authentication](evidence/07-cryptominer-root-ssh-access.png)
+
+*Figure 7 — Linux authentication logs showing six successful password-based SSH logins to `root` from `45.9.148.125` on September 11, 2025, between 21:13 and 21:26 UTC.*
+
 #### Post-Compromise System Discovery
 
 Following root authentication, auditd records showed commands associated with host reconnaissance.
@@ -390,6 +394,30 @@ The investigation identified execution involving an executable named:
 The simulated scenario associated this executable with cryptocurrency-mining activity.
 
 The preserved process evidence supported execution of the suspicious program. Its cryptocurrency-mining functionality was based on the scenario context and was not independently established through binary analysis or confirmed mining-pool communications.
+
+#### Reconstructed Attack Progression
+
+The auditd `PROCTITLE` records provided a chronological view of the commands executed during the suspicious activity.
+
+| Time (UTC) | Observed Activity | Investigative Significance |
+| --- | --- | --- |
+| 21:13 | `groups`, `id`, `last`, `ps`, `ip a` | Account, session, process, and network discovery |
+| 21:13 | `egrep` checks for `falcon`, `sentinel`, and `ds_agent` | Security-software discovery |
+| 21:14 | `cat /proc/cpuinfo`, `free -m`, `lscpu`, `lspu`, `mkdir -apt` | Resource enumeration and suspicious commands |
+| 21:14 | `tar xzf kernupd.tar.gz -C /tmp/.apt` | Extraction of the suspected payload into a temporary staging directory |
+| 21:15 | `nohup bash -c` with `nc -zvw1` against `10.10.12.1`–`10.10.12.10` on port `22` | Internal SSH port reconnaissance |
+| 21:16 | `chmod +x /tmp/.apt/kernupd/kernupd` | Preparation of the staged executable |
+| 21:16 | `nohup /tmp/.apt/kernupd/kernupd` | Execution of the suspected cryptominer |
+
+![Cryptominer attack progression](evidence/08-cryptominer-attack-progression.png)
+
+*Figure 8 — auditd PROCTITLE records showing security-tool discovery, host reconnaissance, payload extraction, internal SSH port scanning, and execution of `kernupd`.*
+
+The command sequence suggests a progression from environment reconnaissance to payload deployment.
+
+The internal port scan used `nc` to check SSH connectivity across `10.10.12.1` through `10.10.12.10`. This establishes reconnaissance activity, not successful lateral movement.
+
+The final `nohup` command shows an attempt to launch the suspected cryptominer. The preserved audit records do not independently establish sustained mining activity, resource utilization, or communication with a mining pool.
 
 #### Analyst Assessment
 
