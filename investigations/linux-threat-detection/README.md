@@ -273,19 +273,47 @@ The investigation focused on identifying the commands associated with the script
 
 #### System Discovery
 
-The preserved auditd evidence associated `debug.sh` with commands used to gather information about the Linux host.
+The investigation began with auditd recording `hostname` execution by the `itsupport` user.
 
-System-discovery commands can reveal the operating-system environment, user context, available resources, and running processes.
+The initial process had PID `3772` and parent PID `3771`. Tracing the parent through auditd identified:
 
-Such commands are not inherently malicious. Their significance depends on the originating process, execution context, sequence, and surrounding activity.
+`bash debug.sh`
 
-#### Security-Tool Discovery
+The parent process was associated with `/home/itsupport/debug.sh`.
 
-Additional activity involved checking for security-related software or monitoring processes.
+Rather than treating the `hostname` command as a standalone detection, I examined the other processes spawned by the same parent PID.
 
-Security-tool discovery can help an attacker identify defensive controls that might interfere with subsequent actions.
+The script executed several discovery commands:
 
-In this scenario, the combination of general system reconnaissance and security-product enumeration raised concern that the script was being used to profile the environment.
+| Command | Information Collected |
+| --- | --- |
+| `hostname` | System hostname |
+| `uname -a` | Operating system and kernel information |
+| `lscpu` | CPU architecture and characteristics |
+| `uptime` | System uptime |
+| `free -h` | Memory availability |
+| `df -hT` | Filesystem capacity and types |
+| `ps -eo pid,ppid,cmd,%mem,%cpu` | Running processes and resource consumption |
+
+![Linux discovery script command sequence](evidence/06-debug-script-system-discovery.png)
+
+*Figure 6 — auditd PROCTITLE records showing system-enumeration commands executed by the `debug.sh` process tree.*
+
+The commands were executed in rapid succession, consistent with automated system profiling.
+
+The most important investigative finding was the shared process ancestry: multiple ordinary Linux utilities were launched from one shell script rather than being unrelated administrative commands.
+
+This provided a stronger basis for assessing the behavior than the initial `hostname` event alone.
+
+#### Resource and Process Enumeration
+
+The script also examined memory consumption and CPU utilization using `ps`, sorting process output by resource usage.
+
+These commands can support legitimate troubleshooting, performance diagnostics, or attacker reconnaissance.
+
+In this scenario, the rapid sequence of discovery commands made the script worth investigating, but the available auditd evidence did not independently establish malicious intent.
+
+The later cryptominer investigation contains separate security-tool discovery activity and is documented in Scenario 4.
 
 #### Analyst Assessment
 
