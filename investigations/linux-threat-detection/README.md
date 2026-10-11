@@ -568,3 +568,93 @@ The available records did not independently establish how the credentials were o
 - Examine auditd UID, EUID, and process ancestry to distinguish attempted escalation from confirmed privileged execution.
 - Investigate privileged command execution originating from service accounts outside approved administrative workflows.
 
+### Scenario 6 — Linux Persistence Mechanisms
+
+#### Investigation Context
+
+The final scenario investigated suspicious configuration changes following privileged access to a Linux system.
+
+The investigation focused on identifying mechanisms that could allow an attacker to regain execution or access after the original session ended.
+
+Four persistence-related activities were examined:
+
+1. Creation of a systemd service.
+2. Modification of cron to execute a program at startup.
+3. Creation of an additional privileged local account.
+4. Modification of the root user's SSH authorized keys.
+
+These mechanisms were examined independently to establish which changes were visible in the preserved evidence and what additional validation would be required.
+
+#### Systemd Service Persistence
+
+The investigation identified a systemd service named `tux.service`.
+
+The service configuration was associated with an attempt to establish persistent execution through the Linux service manager.
+
+Systemd services can execute programs automatically based on their configured startup behavior. When abused, they provide a means of maintaining execution beyond the original interactive session.
+
+The presence of a suspicious service configuration supported a persistence assessment, although the preserved evidence did not independently confirm that the associated payload executed after a reboot.
+
+#### Cron-Based Persistence
+
+Additional evidence identified a cron entry configured to execute a program when the system starts:
+
+```text
+@reboot /usr/sbin/phoenix
+```
+
+The `@reboot` directive instructs cron to launch the specified command when the cron daemon starts.
+
+The entry therefore represented a potential persistence mechanism involving the executable `/usr/sbin/phoenix`.
+
+The observed configuration did not independently prove that the executable subsequently ran or that the payload remained functional.
+
+![Systemd and cron persistence evidence](evidence/11-systemd-cron-persistence.png)
+
+*Figure 11 — Linux persistence evidence showing the `tux.service` systemd configuration and a cron `@reboot` entry referencing `/usr/sbin/phoenix`.*
+
+#### Privileged Local Account Creation
+
+The investigation identified activity associated with creation of a local account named `koichi`.
+
+The scenario also involved assigning elevated privileges to the account.
+
+An attacker-controlled privileged account can provide an alternative authentication path even if the original compromised credentials are changed.
+
+The investigation examined the account-management commands and available configuration evidence to determine how the account could be used for persistence.
+
+#### SSH Authorized-Key Modification
+
+The final persistence mechanism involved changes to:
+
+`/root/.ssh/authorized_keys`
+
+This file defines public keys permitted to authenticate as root through SSH, subject to the system's SSH configuration.
+
+Adding an attacker-controlled public key could provide an alternative authentication method that does not require the original account password.
+
+The preserved evidence supported an authorized-key modification attempt, but did not include the complete key material or independently confirm a subsequent successful SSH login using the new key.
+
+![Privileged account and SSH-key persistence](evidence/12-account-ssh-key-persistence.png)
+
+*Figure 12 — Linux account-management and SSH authorized-key activity associated with the `koichi` account and `/root/.ssh/authorized_keys`.*
+
+#### Analyst Assessment
+
+**Assessment: Multiple persistence mechanisms targeting service execution, scheduled execution, privileged authentication, and SSH access.**
+
+The observed activity was consistent with an attempt to maintain long-term access to the Linux host through redundant mechanisms.
+
+The persistence techniques were significant because remediation limited to terminating a suspicious process would not necessarily remove unauthorized accounts, scheduled tasks, service configurations, or SSH keys.
+
+The preserved evidence did not independently establish that every configured persistence mechanism successfully executed or was used after a system restart.
+
+#### Detection Opportunities
+
+- Monitor creation and modification of systemd service files, particularly services referencing unfamiliar executables.
+- Detect unexpected cron modifications, including new `@reboot` entries.
+- Monitor creation of local accounts and assignment of privileged group membership.
+- Alert on unauthorized modifications to `/root/.ssh/authorized_keys`.
+- Correlate persistence-related changes with earlier suspicious root sessions and command execution.
+- Validate suspicious service, cron, account, and SSH-key configuration changes during incident response.
+- Review multiple persistence locations before considering a compromised host remediated.
