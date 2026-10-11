@@ -233,3 +233,65 @@ However, the evidence did not independently establish an active C2 session, mali
 - Identify related `HEAD` and `GET` requests targeting the same resource.
 - Correlate HTTP requests with DNS, proxy, and endpoint telemetry to establish broader activity.
 - Avoid classifying traffic as confirmed C2 solely because it uses a suspicious user agent or external hosting service.
+
+### Finding 3 — External Pastebin Resource Investigation
+
+#### Investigation Context
+
+The HTTP events associated with `192.166.65.54` identified a consistent destination hostname and URI.
+
+By correlating those fields, I reconstructed the external resource requested by the HTTP client:
+
+`http://pastebin.com/yTg0Ah6a`
+
+The investigation then pivoted from Kibana to an external examination of the resource to understand what content was associated with the suspicious requests.
+
+#### Resource Analysis
+
+The external resource was a Pastebin page titled `secret.txt`.
+
+The preserved screenshot showed that the page contained a TryHackMe room code.
+
+This provided additional context for the resource referenced by the suspicious HTTP traffic, but it was important to distinguish between two separate observations:
+
+| Evidence Source | Confirmed Observation |
+| --- | --- |
+| Kibana HTTP telemetry | `HEAD` and `GET` requests to the Pastebin resource returned HTTP `200` |
+| External browser investigation | The Pastebin resource displayed a page titled `secret.txt` containing a room code |
+
+![External Pastebin resource investigation](evidence/03-pastebin-resource-pivot.png)
+
+*Figure 3 — External examination of the Pastebin resource referenced by the suspicious HTTP requests, showing the `secret.txt` page title.*
+
+The HTTP dataset did not preserve the response body. Consequently, the browser observation did not independently establish that the original HTTP client received identical content or saved it to disk.
+
+The room code is intentionally excluded from the public investigation documentation.
+
+#### Command-and-Control Assessment
+
+Paste sites can be abused to host commands, configuration data, payload references, or other information consumed by malicious software.
+
+In this scenario, the IDS alert and unusual `bitsadmin` user agent made the external request worth investigating as potential C2-related activity.
+
+However, the preserved telemetry contained only two requests to the resource. It did not demonstrate repeated beaconing, command execution, or an interactive communication channel.
+
+The external resource investigation therefore strengthened understanding of the contacted destination without independently proving that the requests were part of an operational C2 mechanism.
+
+#### Analyst Assessment
+
+**Assessment: Suspicious external content retrieval with an unconfirmed C2 objective.**
+
+The investigation reconstructed and examined the Pastebin resource identified in the HTTP events.
+
+The available evidence confirmed requests to the external URL and documented the resource's displayed content during a separate browser investigation.
+
+The evidence did not independently establish that malicious instructions were transmitted, that the endpoint acted on the resource's contents, or that command-and-control communication succeeded.
+
+#### Detection Opportunities
+
+- Reconstruct HTTP destinations using hostname and URI fields to support IOC investigation.
+- Investigate unusual access to paste sites from endpoints associated with security alerts.
+- Correlate external resource requests with endpoint process and file activity.
+- Monitor repeated requests to the same external resource when investigating possible beaconing or command retrieval.
+- Preserve HTTP response content or hashes where legally and operationally appropriate to improve investigation confidence.
+- Distinguish external-browser observations from telemetry collected on the potentially compromised endpoint.
