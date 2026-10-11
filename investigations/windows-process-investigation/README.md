@@ -142,3 +142,54 @@ The baseline helped narrow the investigation from general process activity to sp
 The baseline did not independently indicate a security incident. Its value was in providing a searchable dataset for identifying and investigating suspicious activity.
 
 The following findings use this process telemetry to examine account anomalies, persistence-related commands, and external content retrieval.
+
+### Finding 2 — Suspicious Look-Alike User Account
+
+#### Investigation Context
+
+During the Splunk process-event investigation, username enumeration revealed two visually similar account names:
+
+- `Amelia` — a name present in the supplied employee directory.
+- `Amel1a` — a similar name substituting the numeral `1` for the letter `i`.
+
+The unexpected account name raised concern about potential identity impersonation or an account created to blend into normal user activity.
+
+The investigation focused on determining what process activity was associated with the look-alike username.
+
+#### Account and Process Analysis
+
+The username comparison identified `Amel1a` as an anomaly relative to the known employee list.
+
+A subsequent Splunk search examined process-creation events associated with that account.
+
+The preserved investigation notes identified `whoami.exe` as the only process observed for `Amel1a` in the searched dataset.
+
+| Observation | Investigative Significance |
+| --- | --- |
+| `Amelia` in employee directory | Expected identity used for comparison |
+| `Amel1a` in process-event telemetry | Look-alike username requiring investigation |
+| `whoami.exe` execution | Command commonly used to identify the current user |
+| No other processes identified in the search | Limited visibility into the account's broader activity |
+
+The execution of `whoami.exe` was consistent with user-context discovery, but it is also common during legitimate administration and troubleshooting.
+
+The combination of a visually deceptive username and user-discovery activity made the account worth investigating. However, neither observation independently established malicious intent.
+
+#### Analyst Assessment
+
+**Assessment: Suspicious account-name anomaly with limited observed process activity.**
+
+The available evidence supported the presence of a look-alike username and associated `whoami.exe` execution.
+
+It did not establish how the account was created, who controlled it, whether its credentials were compromised, or whether it possessed elevated privileges.
+
+The finding should therefore be treated as an identity anomaly requiring additional validation rather than confirmed account compromise.
+
+#### Detection Opportunities
+
+- Compare observed account names with approved identity inventories.
+- Investigate newly observed usernames resembling legitimate employees or service accounts.
+- Correlate suspicious account names with authentication and account-creation events.
+- Review Windows Security Event ID `4720` where available to identify account creation.
+- Monitor unexpected discovery commands performed by previously unseen accounts.
+- Investigate account privileges, group memberships, and subsequent activity before determining severity.
