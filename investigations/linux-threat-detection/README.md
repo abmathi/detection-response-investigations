@@ -1,0 +1,109 @@
+# Linux Threat Detection — Authentication, Intrusion and Persistence Investigations
+
+## Executive Summary
+
+This project documents simulated Linux security investigations involving unauthorized SSH access, web application exploitation, suspicious command execution, cryptominer deployment, privilege escalation, and persistence.
+
+The investigations used Linux authentication logs, Nginx access logs, auditd telemetry, and system configuration artifacts to identify attacker behavior and reconstruct suspicious activity.
+
+The analysis covered three areas:
+
+- **Initial access:** SSH password-guessing activity, successful root authentication, and command injection against a web application.
+- **Post-compromise activity:** System and security-tool discovery, suspicious script execution, staging in temporary directories, internal SSH reconnaissance, and cryptominer-related execution.
+- **Privilege escalation and persistence:** Reverse-shell activity, credential discovery, transition to root through `su`, and modifications involving systemd services, cron jobs, local accounts, and SSH authorized keys.
+
+The objective was to distinguish suspicious commands from confirmed system events, correlate evidence across available log sources, and identify practical detection opportunities for Linux security monitoring.
+
+The scenarios were completed in a controlled training environment. Findings from separate scenarios are documented independently and should not be interpreted as one continuous intrusion.
+
+## Investigation Scope
+
+The case study focuses on identifying and interpreting malicious or suspicious activity on Linux systems.
+
+| Investigation Area | Activities Examined | Primary Evidence |
+| --- | --- | --- |
+| Initial Access | SSH authentication attacks, successful root login, web command injection, reverse-shell preparation | Authentication logs, Nginx logs, auditd |
+| Discovery and Execution | System reconnaissance, security-tool discovery, temporary staging, internal SSH enumeration, cryptominer execution | auditd process and command telemetry |
+| Privilege Escalation and Persistence | Reverse shell, credential discovery, `su root`, systemd, cron, account creation, authorized-key modification | auditd records, authentication activity, persistence configuration |
+
+### Investigation Objectives
+
+The investigations sought to answer the following questions:
+
+1. What events indicated potentially unauthorized access?
+2. Which users, source addresses, processes, and commands were involved?
+3. Could related events be correlated to reconstruct attacker behavior?
+4. Which observations established successful execution or authentication?
+5. What evidence supported persistence or privilege escalation?
+6. What additional telemetry would be needed to validate uncertain outcomes?
+7. How could the findings be translated into effective SOC detections?
+
+## Evidence Sources and Analysis Methodology
+
+### Linux Authentication Logs
+
+Authentication evidence was used to investigate suspicious SSH activity, failed and successful login attempts, and privilege changes.
+
+Relevant fields included source IP addresses, usernames, authentication results, and session-related information.
+
+Authentication success was distinguished from subsequent attacker actions; a valid login event alone does not establish every activity performed during that session.
+
+### Nginx Access Logs
+
+Web server logs provided visibility into suspicious requests targeting the simulated TryPingMe application.
+
+The investigation examined request paths and parameters to identify indications of command injection.
+
+Nginx logs recorded the requests received by the application, while auditd evidence was used where available to determine whether the application subsequently launched suspicious commands.
+
+### auditd Process Telemetry
+
+Linux audit records were used to reconstruct command execution and process relationships.
+
+Important investigative fields included executable paths, command arguments, user identifiers, effective user identifiers, and process context.
+
+These records were particularly valuable for identifying activity that followed initial access, including discovery commands, reverse-shell execution, and privilege escalation.
+
+### System Configuration Artifacts
+
+Persistence-related evidence included changes involving:
+
+- systemd service configurations
+- cron scheduling
+- local user accounts
+- SSH `authorized_keys` files
+
+These mechanisms were examined to determine how an attacker could maintain access after the original session ended.
+
+### Investigation Methodology
+
+The analysis followed a consistent process:
+
+| Step | Analyst Activity |
+| --- | --- |
+| Identify | Locate suspicious authentication, web, process, or configuration events |
+| Pivot | Examine source addresses, accounts, commands, and process identifiers |
+| Correlate | Connect related events using timestamps, sessions, and process context |
+| Assess | Separate observed activity from inferred attacker objectives |
+| Document | Preserve relevant commands, screenshots, and findings |
+| Recommend | Identify detection opportunities and visibility improvements |
+
+### Evidence Standards
+
+Each conclusion was based on the available artifacts rather than assumed attacker success.
+
+For example:
+
+- A suspicious web request does not independently prove that command injection succeeded.
+- A reverse-shell command does not necessarily prove that a connection was established.
+- A successful root login confirms authentication but does not independently establish the preceding credential-attack method.
+- Creation of a persistence configuration does not automatically prove that it was successfully invoked later.
+- An observed file or executable name does not independently establish its full capabilities.
+
+Where the preserved evidence did not demonstrate an outcome, the report identifies the behavior as attempted, suspected, or requiring additional verification.
+
+## Investigation Organization
+
+The report is organized into three sections corresponding to the original Linux Threat Detection scenarios:
+
+1. **Initial Access:** SSH authentication
