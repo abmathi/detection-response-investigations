@@ -107,3 +107,59 @@ Where the preserved evidence did not demonstrate an outcome, the report identifi
 The report is organized into three sections corresponding to the original Linux Threat Detection scenarios:
 
 1. **Initial Access:** SSH authentication
+
+## Initial Access Investigations
+
+### Scenario 1 — Suspicious SSH Authentication and Root Access
+
+#### Investigation Context
+
+The first scenario involved suspicious SSH authentication activity originating from the external IP address `91.224.92.79`.
+
+The investigation focused on identifying repeated authentication failures, determining whether the activity resulted in a successful login, and establishing which Linux account was accessed.
+
+The authentication pattern was consistent with an SSH password-guessing attempt targeting a privileged account.
+
+#### SSH Authentication Analysis
+
+Linux authentication logs were reviewed for failed SSH login attempts and subsequent successful authentication events.
+
+The primary investigative indicators included:
+
+| Indicator | Observation |
+| --- | --- |
+| Source IP | `91.224.92.79` |
+| Targeted account | `root` |
+| Service | SSH (`sshd`) |
+| Suspicious behavior | Repeated authentication failures |
+| Confirmed outcome | Successful root authentication |
+
+Repeated failed authentication events can indicate password guessing, particularly when they target privileged accounts and originate from an unexpected external address.
+
+However, authentication failures alone do not establish that credentials were compromised. The investigation therefore examined subsequent authentication events to identify a confirmed access outcome.
+
+#### Successful Root Authentication
+
+The preserved authentication evidence showed a successful SSH login to the `root` account from `91.224.92.79`.
+
+This provided stronger evidence than failed-login activity alone because it established that the system accepted authentication for the privileged account.
+
+The sequence was consistent with a potential successful password-guessing attack.
+
+However, a successful login following multiple failures does not independently establish that the same actor performed every attempt or that the correct password was obtained through brute force.
+
+#### Analyst Assessment
+
+**Assessment: Suspicious SSH authentication with confirmed root access.**
+
+The combination of repeated authentication failures and successful privileged authentication warranted investigation for potential unauthorized access.
+
+The evidence established successful root authentication from the identified source address. Additional session and command telemetry would be needed to determine what the authenticated user subsequently executed.
+
+#### Detection Opportunities
+
+- Detect repeated SSH authentication failures from a common source address.
+- Monitor unsuccessful login attempts targeting `root` and other privileged accounts.
+- Correlate repeated authentication failures with later successful SSH authentication.
+- Alert on successful direct root logins from unexpected external addresses.
+- Examine session activity following suspicious successful authentication to identify further compromise indicators.
