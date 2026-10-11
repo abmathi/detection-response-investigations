@@ -167,3 +167,69 @@ The next stage of the investigation narrowed the dataset to this source IP and e
 The initial investigation identified a potentially interesting source but did not independently establish command-and-control activity.
 
 The significance of `192.166.65.54` would depend on the content and characteristics of its observed HTTP requests.
+
+### Finding 2 — Suspicious BitsAdmin HTTP Requests
+
+#### Investigation Context
+
+After identifying `192.166.65.54` as a low-volume source, I filtered the HTTP dataset in Kibana Discover to examine its network activity.
+
+The filtered results contained two HTTP requests targeting an external Pastebin resource.
+
+Both requests reported a `bitsadmin` user agent, which raised concern about potential misuse of a legitimate Windows background-transfer mechanism.
+
+The investigation focused on correlating source and destination addresses, HTTP methods, the requested resource, and response status.
+
+#### HTTP Request Analysis
+
+Filtering the dataset for `source_ip:192.166.65.54` returned two events associated with the same external destination.
+
+| Indicator | Observed Value |
+| --- | --- |
+| Source IP | `192.166.65.54` |
+| Destination IP | `104.23.99.190` |
+| Destination port | `80` |
+| HTTP host | `pastebin.com` |
+| HTTP URI | `/yTg0Ah6a` |
+| Request methods | `HEAD`, `GET` |
+| HTTP response | `200 OK` |
+| Reported user agent | `bitsadmin` |
+
+![Suspicious BitsAdmin HTTP requests](evidence/02-bitsadmin-pastebin-requests.png)
+
+*Figure 2 — Kibana Discover showing two HTTP requests from `192.166.65.54` to `pastebin.com/yTg0Ah6a`, using `HEAD` and `GET` methods and reporting a `bitsadmin` user agent.*
+
+The `HEAD` request was consistent with retrieving HTTP response metadata, while the `GET` request was consistent with requesting the resource's content.
+
+Both requests targeted the same Pastebin path, suggesting related activity rather than unrelated browsing events.
+
+An HTTP `200 OK` response indicated that the server successfully handled the request. However, the HTTP metadata did not establish whether the response body was saved locally or subsequently executed.
+
+#### BitsAdmin User-Agent Assessment
+
+BitsAdmin is a legitimate Windows utility associated with Background Intelligent Transfer Service operations.
+
+Its appearance in the reported user-agent field was suspicious in the context of the IDS alert and the unusual external destination.
+
+However, HTTP user-agent values are supplied by clients and can be modified or impersonated.
+
+The available network telemetry therefore supported an assessment of **BitsAdmin-like HTTP activity**, but did not independently confirm execution of `bitsadmin.exe` on the source endpoint.
+
+#### Analyst Assessment
+
+**Assessment: Suspicious HTTP requests consistent with potential remote-content retrieval.**
+
+The two requests established communication with an external Pastebin resource using `HEAD` and `GET` methods and a reported `bitsadmin` user agent.
+
+The observed behavior warranted further investigation for possible command-and-control or external content retrieval activity.
+
+However, the evidence did not independently establish an active C2 session, malicious command delivery, or execution of downloaded content.
+
+#### Detection Opportunities
+
+- Monitor HTTP activity using unexpected or uncommon user-agent strings, including `bitsadmin`.
+- Correlate suspicious HTTP user agents with endpoint process-creation telemetry where available.
+- Investigate scripted HTTP requests to paste sites or other external content-hosting services.
+- Identify related `HEAD` and `GET` requests targeting the same resource.
+- Correlate HTTP requests with DNS, proxy, and endpoint telemetry to establish broader activity.
+- Avoid classifying traffic as confirmed C2 solely because it uses a suspicious user agent or external hosting service.
