@@ -100,3 +100,45 @@ The report documents four related areas of analysis:
 4. **External Content Retrieval:** Investigating `certutil.exe` activity and the associated external indicator.
 
 The final sections consolidate detection opportunities, MITRE ATT&CK mappings, evidence limitations, and skills demonstrated.
+
+## Investigation Findings
+
+### Finding 1 — Windows Process-Event Baseline
+
+#### Investigation Context
+
+The investigation began by examining Windows Security Event ID `4688` in Splunk to establish visibility into process execution across the available endpoints.
+
+The dataset contained **13,959 process-creation events**.
+
+Rather than immediately searching for a specific malicious executable, the initial analysis focused on identifying the available users, hosts, processes, and command-line fields.
+
+This provided a baseline for subsequent investigative pivots.
+
+#### Process Telemetry Analysis
+
+Event ID `4688` records the creation of a new process when Windows process-creation auditing is enabled.
+
+The Splunk investigation used this telemetry to examine process activity and identify potentially unusual behavior.
+
+| Evidence | Investigative Significance |
+| --- | --- |
+| 13,959 process events | Established the size of the available process-event dataset |
+| Event ID `4688` | Identified the Windows process-creation event source |
+| User and computer fields | Supported attribution of activity to accounts and endpoints |
+| Executable names | Enabled searches for suspicious or unusual processes |
+| Command-line arguments | Provided context about what processes were instructed to do |
+
+![Splunk Windows process-event baseline](evidence/01-splunk-event-baseline.png)
+
+*Figure 1 — Splunk investigation of Windows Security Event ID 4688, establishing the process-event dataset and available fields for further analysis.*
+
+The baseline helped narrow the investigation from general process activity to specific accounts and commands requiring further examination.
+
+#### Analyst Assessment
+
+**Assessment: Process-event visibility established for subsequent threat hunting.**
+
+The baseline did not independently indicate a security incident. Its value was in providing a searchable dataset for identifying and investigating suspicious activity.
+
+The following findings use this process telemetry to examine account anomalies, persistence-related commands, and external content retrieval.
