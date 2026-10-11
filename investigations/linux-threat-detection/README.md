@@ -437,3 +437,62 @@ The evidence supported the observed access and command sequence, while successfu
 - Monitor unexpected executable launches and sustained resource consumption to identify potential cryptomining.
 - Correlate authentication, auditd, filesystem, and network telemetry to reconstruct post-compromise behavior.
 
+## Privilege Escalation and Persistence
+
+### Scenario 5 — Reverse Shell and Privilege Escalation
+
+#### Investigation Context
+
+This scenario investigated suspicious Linux activity involving a reverse shell, credential discovery, and escalation from a lower-privileged service account to the `root` account.
+
+The investigation used auditd process telemetry to reconstruct the command sequence and identify changes in execution privileges.
+
+The objective was to determine how the attacker attempted to obtain interactive access and whether the available evidence confirmed elevated privileges.
+
+#### Suspicious Reverse-Shell Activity
+
+Auditd telemetry identified `socat` execution associated with reverse-shell behavior.
+
+The suspicious process originated within the `svctrypingme` service-account context.
+
+Unlike ordinary network administration, a reverse shell can provide an external operator with access to a command interpreter on the compromised system.
+
+The command evidence was examined for the connection destination, process context, and executable arguments.
+
+Where available, network telemetry would be needed to independently verify successful connection establishment and the remote session's duration.
+
+#### Credential Discovery
+
+Following the reverse-shell activity, additional commands indicated attempts to locate information that could support privilege escalation.
+
+Credential discovery is significant because an attacker operating under a restricted account may attempt to obtain credentials belonging to more privileged users.
+
+The investigation examined the relationship between the suspicious session, discovery commands, and subsequent authentication activity.
+
+#### Root Privilege Escalation
+
+The evidence identified a transition from the `svctrypingme` account to `root` through the `su` utility.
+
+Auditd user-identity and process records provided important context for determining the account and privileges under which commands executed.
+
+The observed UID and EUID values supported successful execution in the root context.
+
+This was consistent with credential-based privilege escalation rather than exploitation of an identified software vulnerability.
+
+#### Analyst Assessment
+
+**Assessment: Suspicious reverse-shell activity followed by credential discovery and confirmed root privilege escalation.**
+
+The evidence supported a transition from a lower-privileged service account to root.
+
+The available records did not independently establish how the credentials were originally obtained or confirm a software vulnerability was exploited.
+
+#### Detection Opportunities
+
+- Detect unexpected execution of `socat` by application service accounts.
+- Monitor command interpreters launched from web application or service processes.
+- Correlate reverse-shell-related commands with subsequent credential-access activity.
+- Alert on unexpected `su` authentication or privilege transitions into `root`.
+- Examine auditd UID, EUID, and process ancestry to distinguish attempted escalation from confirmed privileged execution.
+- Investigate privileged command execution originating from service accounts outside approved administrative workflows.
+
