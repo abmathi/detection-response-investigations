@@ -295,3 +295,134 @@ The evidence did not independently establish that malicious instructions were tr
 - Monitor repeated requests to the same external resource when investigating possible beaconing or command retrieval.
 - Preserve HTTP response content or hashes where legally and operationally appropriate to improve investigation confidence.
 - Distinguish external-browser observations from telemetry collected on the potentially compromised endpoint.
+
+## Detection Opportunities
+
+The investigation identified suspicious HTTP activity that could be monitored through network telemetry and correlated with endpoint evidence.
+
+The most valuable detection opportunities involve combining unusual HTTP characteristics with process and network context rather than relying on individual indicators alone.
+
+| Detection Use Case | Suggested Detection Logic | Relevant Telemetry |
+| --- | --- | --- |
+| Unusual HTTP source activity | Identify sources with uncommon destinations or request patterns relative to their established baseline | Elastic HTTP logs |
+| BitsAdmin-like HTTP requests | Investigate requests reporting a `bitsadmin` user agent, particularly to unexpected external services | HTTP user-agent fields |
+| Related HTTP methods | Correlate `HEAD` and `GET` requests targeting the same resource within a short period | HTTP methods, hostnames, URIs, timestamps |
+| Suspicious content-hosting access | Identify unexpected requests to Pastebin or similar external hosting services | HTTP logs, DNS, proxy telemetry |
+| Endpoint-to-network correlation | Connect suspicious HTTP requests with process creation or BITS job activity on the originating endpoint | Sysmon, Windows process telemetry, BITS logs |
+| Potential C2 retrieval | Investigate repeated or otherwise suspicious requests to externally hosted resources, especially when followed by unusual endpoint activity | HTTP logs, endpoint and network telemetry |
+
+### Recommended Correlation Rules
+
+Three useful detection patterns emerged from the investigation.
+
+**1. Unexpected BitsAdmin-like HTTP activity**
+
+Identify HTTP requests containing a `bitsadmin` user agent and examine the destination, requested resource, source endpoint, and surrounding activity.
+
+Correlate the network events with process telemetry or BITS job records before attributing them to the Windows BitsAdmin utility.
+
+**2. Suspicious external resource retrieval**
+
+Identify related `HEAD` and `GET` requests to an unusual external resource.
+
+Correlate the requests with response metadata and endpoint activity to determine whether a suspicious file or other content was retrieved.
+
+The request sequence alone should not be treated as proof of payload delivery.
+
+**3. Possible web-service command retrieval**
+
+Investigate repeated or otherwise suspicious requests to paste sites or other content-hosting services.
+
+Where available, correlate the traffic with response content, endpoint execution, and subsequent connections to other destinations.
+
+These additional observations would help distinguish ordinary content retrieval from a possible C2 mechanism.
+
+The proposed detections were derived from the training investigation. They were not implemented or validated as production detection rules.
+
+---
+
+## MITRE ATT&CK Mapping
+
+The following techniques represent potential explanations for the observed HTTP activity.
+
+| Candidate Technique | ATT&CK ID | Supporting Observation | Evidence Limitation |
+| --- | --- | --- | --- |
+| Web Service | `T1102` | Requests to an externally hosted Pastebin resource in the context of a suspected C2 alert | No evidence that the resource was used to relay malicious commands or C2 data |
+| Web Service: Dead Drop Resolver | `T1102.001` | Pastebin could theoretically host instructions or references to other infrastructure | No secondary C2 address, resolver behavior, or follow-on connection was established |
+| BITS Jobs | `T1197` | The HTTP requests reported a `bitsadmin` user agent | No BITS job records or endpoint process evidence confirmed actual BITS usage |
+| Ingress Tool Transfer | `T1105` | HTTP `GET` requested an external resource | No evidence that an executable tool or payload was transferred to the endpoint |
+
+### Mapping Considerations
+
+These are investigative hypotheses, not confirmed ATT&CK technique matches.
+
+The strongest observed evidence consists of two HTTP requests to a Pastebin resource, the `bitsadmin` user-agent value, and successful HTTP responses.
+
+MITRE ATT&CK describes legitimate web services as potential C2 channels, including their use as dead-drop resolvers. However, the preserved ItsyBitsy evidence does not show the behavior needed to confirm those techniques.
+
+Similarly, the user-agent field alone does not establish use of BITS jobs, and the HTTP request alone does not establish ingress transfer of an attacker tool.
+
+Accordingly, no ATT&CK technique is classified as conclusively demonstrated by the preserved network evidence.
+
+---
+
+## Evidence Limitations
+
+The investigation was reconstructed from Kibana HTTP records, three preserved screenshots, and an external resource examination.
+
+| Investigation Area | Confirmed Observation | Evidence Limitation |
+| --- | --- | --- |
+| Traffic baseline | 1,482 HTTP events within the selected investigation window | Event count and source distribution did not establish malicious intent |
+| Suspicious source | `192.166.65.54` generated two filtered HTTP events | Low traffic volume alone did not establish compromise |
+| HTTP requests | `HEAD` and `GET` requests targeted `pastebin.com/yTg0Ah6a` | Request metadata did not reveal the HTTP response body |
+| User agent | Both requests reported `bitsadmin` | Endpoint execution of `bitsadmin.exe` was not independently confirmed |
+| HTTP responses | Both requests returned HTTP `200 OK` | Successful server responses did not prove local file creation or execution |
+| External resource | A separate browser investigation displayed a Pastebin page titled `secret.txt` | The endpoint's receipt or use of the displayed content was not confirmed |
+| C2 hypothesis | Suspicious activity was identified in the context of an IDS alert | No confirmed beaconing, command exchange, or secondary C2 connection |
+
+### Analytical Standard
+
+The investigation distinguished directly observed network behavior from inferred attacker objectives.
+
+- HTTP request logs can identify destinations, methods, user agents, and response statuses without proving endpoint execution.
+- User-agent strings can be imitated and should not be treated as definitive process attribution.
+- A successful HTTP response does not independently establish that its contents were saved or executed.
+- An external browser investigation cannot substitute for response-content capture from the original traffic.
+- Pastebin access can be legitimate and does not independently establish C2 activity.
+- The supplied alert provided investigative context, not proof of a completed compromise.
+
+These limitations were retained to ensure the investigation remained evidence-driven.
+
+---
+
+## Skills Demonstrated
+
+**Elastic and Network Security Monitoring**
+- Kibana Discover investigation
+- HTTP event filtering and baselining
+- Source and destination IP analysis
+- HTTP method, URI, status, and user-agent analysis
+
+**Threat Hunting and IOC Investigation**
+- Suspicious source identification
+- HTTP request reconstruction
+- External resource investigation
+- C2 hypothesis assessment
+- Distinguishing client-supplied metadata from endpoint evidence
+
+**SOC Detection and Reporting**
+- Behavioral detection design
+- Network-to-endpoint correlation planning
+- MITRE ATT&CK hypothesis mapping
+- Evidence validation
+- Technical investigation documentation
+
+### Investigation Takeaway
+
+The most important lesson from this investigation was that suspicious network activity must be evaluated in context.
+
+Two requests to a Pastebin resource using a `bitsadmin` user agent justified further investigation, particularly because the activity originated from a source identified during a suspected C2 alert.
+
+However, the preserved HTTP metadata did not independently demonstrate malicious command retrieval, payload execution, or an operational command-and-control channel.
+
+The investigation demonstrates how Elastic/Kibana can support network threat hunting while preserving the distinction between observed traffic and suspected attacker behavior.
