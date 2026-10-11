@@ -260,3 +260,43 @@ The reverse-shell-related activity increased the severity of the incident, altho
 - Alert on web application service accounts launching interactive shells or unexpected interpreters.
 - Monitor Python execution involving suspicious network-communication patterns.
 - Preserve both web access logs and auditd process events to support cross-source investigation.
+
+## Discovery and Cryptominer Activity
+
+### Scenario 3 — Suspicious Shell Script and System Discovery
+
+#### Investigation Context
+
+This scenario examined a suspicious shell script named `debug.sh` that executed Linux discovery commands.
+
+The investigation focused on identifying the commands associated with the script and determining whether the behavior was consistent with ordinary system troubleshooting or post-compromise reconnaissance.
+
+#### System Discovery
+
+The preserved auditd evidence associated `debug.sh` with commands used to gather information about the Linux host.
+
+System-discovery commands can reveal the operating-system environment, user context, available resources, and running processes.
+
+Such commands are not inherently malicious. Their significance depends on the originating process, execution context, sequence, and surrounding activity.
+
+#### Security-Tool Discovery
+
+Additional activity involved checking for security-related software or monitoring processes.
+
+Security-tool discovery can help an attacker identify defensive controls that might interfere with subsequent actions.
+
+In this scenario, the combination of general system reconnaissance and security-product enumeration raised concern that the script was being used to profile the environment.
+
+#### Analyst Assessment
+
+**Assessment: Suspicious shell-script execution and system discovery.**
+
+The observed activity was consistent with post-compromise reconnaissance, although the discovery commands alone did not establish a successful intrusion, privilege escalation, or lateral movement.
+
+#### Detection Opportunities
+
+- Monitor unexpected shell scripts executing multiple system-discovery commands.
+- Correlate discovery processes with a common parent script or execution session.
+- Investigate security-tool enumeration performed outside approved administration workflows.
+- Use auditd process records to identify command arguments, executable paths, and execution context.
+- Prioritize discovery activity following suspicious authentication or remote-access events.
