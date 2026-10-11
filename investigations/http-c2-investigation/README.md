@@ -117,3 +117,53 @@ The report follows the investigative workflow:
 4. **Detection and Defensive Analysis:** Identifying monitoring opportunities and mapping relevant ATT&CK techniques.
 
 The final sections document evidence limitations, investigation outcomes, and skills demonstrated.
+
+## Investigation Findings
+
+### Finding 1 — HTTP Traffic Baseline and Source Identification
+
+#### Investigation Context
+
+The investigation began with an IDS alert indicating potential command-and-control (C2) activity.
+
+Before examining any particular destination or indicator, I used Kibana Discover to establish a baseline of the available HTTP telemetry.
+
+The selected March 2022 dataset contained **1,482 HTTP events** associated with two source IP addresses.
+
+#### HTTP Traffic Analysis
+
+The initial analysis focused on the distribution of network activity across source addresses.
+
+| Indicator | Observation |
+| --- | --- |
+| Platform | Elastic/Kibana Discover |
+| Investigation period | March 2022 |
+| Total HTTP events | 1,482 |
+| Primary source IP | `192.166.65.52` |
+| Secondary source IP | `192.166.65.54` |
+| Primary source share | Approximately 99.6% |
+| Secondary source share | Approximately 0.4% |
+
+![HTTP traffic baseline in Kibana Discover](evidence/01-kibana-http-baseline.png)
+
+*Figure 1 — Kibana Discover showing the HTTP investigation dataset, event volume, and available telemetry fields used to establish the traffic baseline.*
+
+The majority of HTTP events were associated with `192.166.65.52`, while `192.166.65.54` accounted for a small proportion of the dataset.
+
+This difference provided a useful starting point for investigation, but traffic volume alone was not sufficient to establish malicious behavior.
+
+#### Suspicious Source Selection
+
+I selected `192.166.65.54` for further investigation because it stood out from the dominant traffic source.
+
+Rather than assigning a malicious classification based on the low event count, I examined the HTTP requests associated with the address to identify destinations, request methods, user agents, and response characteristics.
+
+The next stage of the investigation narrowed the dataset to this source IP and examined its HTTP activity.
+
+#### Analyst Assessment
+
+**Assessment: HTTP traffic baseline established; low-volume source selected for further analysis.**
+
+The initial investigation identified a potentially interesting source but did not independently establish command-and-control activity.
+
+The significance of `192.166.65.54` would depend on the content and characteristics of its observed HTTP requests.
