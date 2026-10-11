@@ -247,3 +247,88 @@ The investigation did not independently establish that `OfficUpdater` was succes
 - Correlate suspicious process creation with Windows Security Event ID `4698`, where task-creation auditing is enabled.
 - Review Task Scheduler Operational logs and task definitions to validate registration and execution.
 - Investigate task names that imitate legitimate software or operating-system components.
+
+### Finding 4 — Suspicious Certutil Download Activity
+
+#### Investigation Context
+
+The investigation identified suspicious execution of `certutil.exe` by the Windows account `haroon` on endpoint `HR_01`.
+
+The process event was recorded on March 4, 2022, and contained command-line arguments associated with downloading external content.
+
+`certutil.exe` is a legitimate Windows certificate-management utility. However, its ability to retrieve files from remote locations makes it useful to attackers attempting to transfer payloads while blending into normal Windows activity.
+
+The investigation focused on identifying the external destination, intended output file, and any evidence of subsequent executable activity.
+
+#### Process and Command-Line Analysis
+
+Windows Security Event ID `4688` recorded a `certutil.exe` command referencing:
+
+`controlc.com/e4d11035`
+
+The command specified an output file named:
+
+`benign.exe`
+
+| Indicator | Observed Value |
+| --- | --- |
+| User | `haroon` |
+| Endpoint | `HR_01` |
+| Date | March 4, 2022 |
+| Process | `certutil.exe` |
+| External destination | `controlc.com/e4d11035` |
+| Intended output | `benign.exe` |
+| Suspicious behavior | External content retrieval using a legitimate Windows utility |
+
+![Suspicious certutil command in Splunk](evidence/03-certutil-external-download-command.png)
+
+*Figure 3 — Splunk Event ID 4688 showing `certutil.exe` executed by `haroon` on `HR_01`, with arguments referencing `controlc.com/e4d11035` and the intended output file `benign.exe`.*
+
+The combination of an external resource and an executable output filename was suspicious because `certutil.exe` can be abused to retrieve attacker-controlled files.
+
+The event confirmed execution of a command requesting external content. It did not independently establish that the remote request completed or that `benign.exe` was successfully created.
+
+#### Subsequent Execution Search
+
+The investigation searched the available process-event telemetry for evidence that `benign.exe` subsequently executed.
+
+No matching `benign.exe` process-creation event was identified in the searched dataset.
+
+This reduced the available evidence for successful payload execution, but did not conclusively establish that the file never existed or never ran.
+
+Additional network, file-creation, or endpoint telemetry would be required to determine whether the download completed and whether the resulting file was executed.
+
+#### External Indicator Investigation
+
+The URL identified in the `certutil.exe` command provided an external indicator for additional investigation:
+
+`controlc.com/e4d11035`
+
+The preserved screenshot showed content associated with the referenced resource, including a mention of `flag.txt`.
+
+This observation provided additional context for the suspicious URL but did not establish that the Windows endpoint successfully downloaded or executed the displayed content.
+
+Because the resource was examined separately from the endpoint process telemetry, its contents were not treated as confirmation of a completed payload transfer.
+
+![External IOC investigation](evidence/04-controlc-ioc-pivot.png)
+
+*Figure 4 — Investigation of the external resource referenced by the suspicious `certutil.exe` command, showing the associated content and `flag.txt` indicator.*
+
+#### Analyst Assessment
+
+**Assessment: Suspicious use of `certutil.exe` for attempted external content retrieval.**
+
+The evidence demonstrated execution of a legitimate Windows utility with arguments consistent with downloading an externally hosted resource.
+
+The intended executable output and unusual external destination justified further investigation.
+
+However, the preserved process events did not independently confirm successful download, payload execution, or subsequent compromise.
+
+#### Detection Opportunities
+
+- Monitor `certutil.exe` execution containing download-related arguments or external URLs.
+- Investigate certificate utilities writing executable files into unexpected locations.
+- Correlate suspicious `certutil.exe` commands with subsequent file-creation and process-execution events.
+- Alert on unexpected network activity from Windows utilities that rarely require external downloads in the environment.
+- Examine parent processes, user accounts, and endpoint context to distinguish legitimate administration from suspicious execution.
+- Investigate related outbound connections through proxy, DNS, or network-security telemetry.
