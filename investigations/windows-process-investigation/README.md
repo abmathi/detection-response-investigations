@@ -332,3 +332,132 @@ However, the preserved process events did not independently confirm successful d
 - Alert on unexpected network activity from Windows utilities that rarely require external downloads in the environment.
 - Examine parent processes, user accounts, and endpoint context to distinguish legitimate administration from suspicious execution.
 - Investigate related outbound connections through proxy, DNS, or network-security telemetry.
+
+## Detection Opportunities
+
+The investigation identified several behaviors that can be monitored through Windows process-creation telemetry and correlated with additional security events.
+
+The strongest detection opportunities involve examining command-line arguments, user context, and endpoint activity rather than treating legitimate Windows utilities as malicious by default.
+
+| Detection Use Case | Suggested Detection Logic | Relevant Telemetry |
+| --- | --- | --- |
+| Look-alike user accounts | Identify unexpected usernames resembling known employees or approved accounts | Windows Security Event IDs `4688`, `4720`; identity inventory |
+| Suspicious user discovery | Detect `whoami.exe` execution by newly observed or otherwise unusual accounts | Security Event ID `4688` |
+| Scheduled-task persistence | Detect `schtasks.exe` commands containing task-creation arguments, particularly startup triggers and user-writable executable paths | Security Event IDs `4688`, `4698` |
+| Unusual updater execution | Identify task definitions referencing executables in temporary directories with names resembling legitimate software updates | Task Scheduler logs, process telemetry |
+| Suspicious `certutil.exe` downloads | Identify `certutil.exe` commands requesting external content and writing executable files | Security Event ID `4688`, network telemetry |
+| Potential payload execution | Correlate suspicious download commands with subsequent file creation and process execution | Security Event ID `4688`, Sysmon file events where available |
+| External indicator investigation | Correlate suspicious URLs identified in process commands with proxy, DNS, or network connections | Process command lines, proxy and network logs |
+
+### Recommended Correlation Rules
+
+Three useful detection patterns emerged from the investigation.
+
+**1. Look-alike account followed by discovery activity**
+
+Compare newly observed usernames with the organization's approved identity inventory.
+
+If an unfamiliar account closely resembles a legitimate user and executes discovery commands such as `whoami.exe`, investigate its origin, privileges, authentication activity, and subsequent execution history.
+
+**2. Suspicious scheduled-task creation**
+
+Identify `schtasks.exe` execution with the `/create` option, then examine the task name, trigger, and executable path.
+
+Prioritize startup-triggered tasks referencing executables in temporary or user-writable locations.
+
+Correlate Event ID `4688` with Event ID `4698` or Task Scheduler Operational records to distinguish attempted registration from confirmed task creation.
+
+**3. Suspicious `certutil.exe` download followed by execution**
+
+Identify `certutil.exe` commands using download-related arguments and referencing external URLs.
+
+Correlate these commands with file-creation telemetry and subsequent process execution involving the intended output filename.
+
+A download command alone should not be treated as proof that a payload was retrieved or executed.
+
+These are proposed defensive detections based on the observed investigation findings. They were not implemented or validated as production detection rules.
+
+---
+
+## MITRE ATT&CK Mapping
+
+The following ATT&CK techniques classify the suspicious behaviors observed during the investigation.
+
+| Finding | MITRE ATT&CK Technique | ID | Supporting Evidence |
+| --- | --- | --- | --- |
+| Look-alike account | Masquerading: Masquerade Account Name | `T1036.010` | `Amel1a` closely resembled the legitimate username `Amelia`; suspicious but not confirmed attacker-controlled |
+| User discovery | System Owner/User Discovery | `T1033` | `whoami.exe` execution associated with `Amel1a` |
+| Scheduled-task persistence | Scheduled Task/Job: Scheduled Task | `T1053.005` | `schtasks.exe` command attempting to configure `OfficUpdater` at startup |
+| External content retrieval | Ingress Tool Transfer | `T1105` | `certutil.exe` command requesting external content and an executable output filename |
+| Suspicious Windows utility | System Binary Proxy Execution | `T1218` | **Candidate only:** suspicious use of `certutil.exe`; the preserved evidence more directly supports attempted content retrieval than execution through a signed binary |
+
+### Mapping Considerations
+
+These mappings describe observed or suspected behaviors, not confirmation that every attacker objective succeeded.
+
+The look-alike account name raised a masquerading concern, but the preserved evidence did not establish that the account was attacker-created or intended to impersonate the legitimate user.
+
+The scheduled-task command supported attempted persistence, although successful task registration was not confirmed.
+
+Similarly, the `certutil.exe` command supported an attempted external transfer. The preserved process events did not establish successful download or subsequent payload execution.
+
+The ATT&CK mappings therefore identify relevant techniques and investigative hypotheses while retaining the limitations of the available evidence.
+
+---
+
+## Evidence Limitations
+
+The investigation was reconstructed from preserved Splunk searches, Windows Security process events, screenshots, and investigation notes.
+
+| Finding | Confirmed Observation | Evidence Limitation |
+| --- | --- | --- |
+| Process-event baseline | 13,959 Windows process events were available for analysis | Event volume alone did not establish malicious activity |
+| Look-alike account | `Amel1a` appeared in the searched process-event data; `whoami.exe` was identified in the investigation notes | Account creation, ownership, privileges, and malicious intent were not established |
+| Scheduled-task persistence | `schtasks.exe` executed with arguments requesting creation of `OfficUpdater` | Successful task registration and later execution were not independently confirmed |
+| Certutil download | `certutil.exe` executed with an external URL and intended executable output | Successful file retrieval and execution were not confirmed |
+| External IOC pivot | The referenced external resource was examined separately | The displayed content was not proof of successful retrieval by the Windows endpoint |
+
+### Analytical Standard
+
+The investigation distinguished observed command execution from confirmed system outcomes.
+
+- Event ID `4688` establishes process creation, not successful completion of every operation requested by the process.
+- A suspicious account name does not independently establish account compromise or malicious creation.
+- A task-creation command does not confirm that the scheduled task was registered.
+- A download command does not confirm that the destination was reachable or that a file was created.
+- The absence of a matching process event in the searched data does not conclusively prove that execution never occurred.
+- An external resource's contents provide investigative context but do not independently validate endpoint behavior.
+
+These limitations were retained so that the investigation conclusions remain grounded in observable evidence.
+
+---
+
+## Skills Demonstrated
+
+**SIEM and Windows Security Monitoring**
+- Splunk search and event analysis
+- Windows Security Event ID `4688` investigation
+- User and endpoint activity correlation
+- Command-line and executable analysis
+
+**Threat Investigation**
+- Suspicious account identification
+- User-discovery activity analysis
+- Scheduled-task persistence investigation
+- Living-off-the-land utility investigation
+- External IOC analysis
+
+**SOC Detection and Reporting**
+- Behavioral detection design
+- MITRE ATT&CK mapping
+- Evidence correlation
+- Distinguishing attempted operations from confirmed outcomes
+- Technical investigation documentation
+
+### Investigation Takeaway
+
+The strongest lesson from this investigation was the importance of analyzing process behavior in context.
+
+Legitimate Windows utilities such as `schtasks.exe`, `certutil.exe`, and `whoami.exe` are commonly used during normal administration. Their significance depends on which accounts execute them, the arguments supplied, and the surrounding endpoint activity.
+
+The investigation demonstrates how Splunk and Windows Security telemetry can help identify suspicious activity while maintaining appropriate confidence levels about persistence, downloads, and account anomalies.
