@@ -175,3 +175,53 @@ The evidence established successful root authentication from the identified sour
 - Correlate repeated authentication failures with later successful SSH authentication.
 - Alert on successful direct root logins from unexpected external addresses.
 - Examine session activity following suspicious successful authentication to identify further compromise indicators.
+
+### Scenario 2 — TryPingMe Web Command Injection
+
+#### Investigation Context
+
+The second scenario involved suspicious HTTP requests targeting the TryPingMe web application.
+
+The investigation correlated Nginx access logs with Linux auditd telemetry to determine whether the requests merely attempted command injection or resulted in operating-system command execution.
+
+This distinction was important because a malicious-looking web request does not independently prove that the application executed its contents.
+
+#### Suspicious Web Requests
+
+Nginx access logs recorded requests containing command-injection syntax in parameters supplied to the TryPingMe application.
+
+The request content was consistent with an attempt to cause the application to execute system commands instead of processing only the intended input.
+
+The HTTP logs established that the requests reached the web server, but did not independently prove successful exploitation.
+
+#### Confirmed Command Execution
+
+Linux auditd telemetry provided additional visibility into process execution occurring after the suspicious requests.
+
+The audit records associated attacker-supplied commands with processes launched through the web application's execution context.
+
+This correlation supported an assessment that the command injection resulted in operating-system command execution, rather than remaining an unsuccessful request.
+
+#### Reverse-Shell Activity
+
+The investigation also identified Python command execution associated with reverse-shell behavior.
+
+The preserved command evidence was truncated, limiting reconstruction of the complete Python command and its connection parameters.
+
+The available evidence supported suspicious Python execution consistent with reverse-shell preparation or attempted execution. It did not independently confirm that a remote interactive session was successfully established.
+
+#### Analyst Assessment
+
+**Assessment: Successful web command injection with observed command execution and suspected reverse-shell activity.**
+
+The Nginx logs demonstrated attacker-controlled input reaching the application, while auditd records provided stronger evidence of command execution on the Linux host.
+
+The reverse-shell-related activity increased the severity of the incident, although successful external session establishment was not independently confirmed.
+
+#### Detection Opportunities
+
+- Monitor web application requests for unexpected shell metacharacters and command separators.
+- Correlate suspicious HTTP requests with shell or scripting processes spawned by web server processes.
+- Alert on web application service accounts launching interactive shells or unexpected interpreters.
+- Monitor Python execution involving suspicious network-communication patterns.
+- Preserve both web access logs and auditd process events to support cross-source investigation.
