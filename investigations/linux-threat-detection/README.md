@@ -328,3 +328,84 @@ The observed activity was consistent with post-compromise reconnaissance, althou
 - Investigate security-tool enumeration performed outside approved administration workflows.
 - Use auditd process records to identify command arguments, executable paths, and execution context.
 - Prioritize discovery activity following suspicious authentication or remote-access events.
+
+### Scenario 4 — SSH Compromise and Cryptominer Activity
+
+#### Investigation Context
+
+This scenario investigated suspicious activity on a Linux host following successful SSH authentication to the `root` account.
+
+The investigation focused on reconstructing the command sequence associated with the compromised session, including system reconnaissance, security-tool discovery, suspicious file staging, internal SSH exploration, and execution of a suspected cryptominer.
+
+The analysis used Linux authentication records and auditd command telemetry to connect the initial access event with subsequent host activity.
+
+#### Successful Root SSH Access
+
+Authentication logs recorded a successful SSH login to the `root` account.
+
+This established that the system accepted a privileged remote session. The surrounding scenario was consistent with credential-based compromise, but the preserved authentication screenshot did not independently demonstrate the preceding password-guessing attempts.
+
+The successful authentication event was therefore treated as the confirmed access point for further investigation rather than definitive proof of the initial credential-acquisition method.
+
+#### Post-Compromise System Discovery
+
+Following root authentication, auditd records showed commands associated with host reconnaissance.
+
+The activity involved gathering information about the operating environment and identifying processes or software that could affect subsequent execution.
+
+Discovery commands can occur during legitimate administration. However, their appearance within a suspicious privileged session increased the significance of the activity.
+
+#### Security-Tool Discovery
+
+The investigation identified commands consistent with checking for security or monitoring software.
+
+This type of reconnaissance can help an attacker determine whether endpoint defenses are present before deploying additional tools.
+
+The observed commands supported a security-tool discovery assessment, but did not independently confirm that monitoring software was disabled or bypassed.
+
+#### Suspicious File Staging
+
+The command sequence also involved a temporary directory:
+
+`/tmp/.apt`
+
+The directory name resembled a system package-management location, while its placement under `/tmp` was consistent with attacker-controlled staging.
+
+The use of a hidden-looking directory alone does not establish malicious activity, but it can be meaningful when correlated with suspicious authentication, reconnaissance, and subsequent executable activity.
+
+#### Internal SSH Reconnaissance
+
+Additional commands were consistent with attempts to identify or access other systems through SSH.
+
+This activity raised concern about potential lateral movement beyond the originally accessed Linux host.
+
+However, command execution alone did not establish that authentication to another system succeeded or that a second host was compromised.
+
+#### Suspected Cryptominer Execution
+
+The investigation identified execution involving an executable named:
+
+`kernupd`
+
+The simulated scenario associated this executable with cryptocurrency-mining activity.
+
+The preserved process evidence supported execution of the suspicious program. Its cryptocurrency-mining functionality was based on the scenario context and was not independently established through binary analysis or confirmed mining-pool communications.
+
+#### Analyst Assessment
+
+**Assessment: Suspicious privileged SSH access followed by reconnaissance, staging, and cryptominer-related execution.**
+
+The combination of root authentication, discovery commands, temporary-directory activity, and execution of `kernupd` was consistent with a Linux host compromise involving potential resource hijacking.
+
+The evidence supported the observed access and command sequence, while successful lateral movement and actual cryptocurrency-mining activity would require additional verification.
+
+#### Detection Opportunities
+
+- Alert on unexpected successful SSH authentication to `root`.
+- Correlate privileged SSH sessions with unusual discovery and executable activity.
+- Monitor commands that enumerate security tools or monitoring processes.
+- Detect suspicious executable staging under `/tmp`, particularly in directories resembling legitimate system components.
+- Investigate unusual internal SSH activity originating from compromised or privileged sessions.
+- Monitor unexpected executable launches and sustained resource consumption to identify potential cryptomining.
+- Correlate authentication, auditd, filesystem, and network telemetry to reconstruct post-compromise behavior.
+
