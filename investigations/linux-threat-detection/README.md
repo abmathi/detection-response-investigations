@@ -134,6 +134,10 @@ The primary investigative indicators included:
 | Suspicious behavior | Repeated authentication failures |
 | Confirmed outcome | Successful root authentication |
 
+![Failed SSH authentication attempts](evidence/01-ssh-failed-authentication.png)
+
+*Figure 1 — Linux authentication logs showing repeated failed SSH password attempts against `root`, `roy`, and `user`, originating from multiple external IP addresses.*
+
 Repeated failed authentication events can indicate password guessing, particularly when they target privileged accounts and originate from an unexpected external address.
 
 However, authentication failures alone do not establish that credentials were compromised. The investigation therefore examined subsequent authentication events to identify a confirmed access outcome.
@@ -141,6 +145,14 @@ However, authentication failures alone do not establish that credentials were co
 #### Successful Root Authentication
 
 The preserved authentication evidence showed a successful SSH login to the `root` account from `91.224.92.79`.
+
+![Successful SSH root authentication](evidence/02-ssh-root-authentication.png)
+
+*Figure 2 — Authentication log confirming a successful password-based SSH login to `root` from `91.224.92.79:51555` on August 21, 2025, at 17:10:08 UTC.*
+
+The failed-authentication evidence also recorded repeated attempts against `root` from `91.224.92.79` shortly before the successful login from the same source address.
+
+This source-address and account correlation strengthens the assessment of a successful password-guessing sequence. However, the log evidence alone does not reveal the method by which the correct password was obtained or establish the full scope of post-login activity.
 
 This provided stronger evidence than failed-login activity alone because it established that the system accepted authentication for the privileged account.
 
