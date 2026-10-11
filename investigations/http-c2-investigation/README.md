@@ -1,0 +1,119 @@
+# HTTP Command-and-Control Investigation — Elastic Security Analysis
+
+## Executive Summary
+
+This project documents a simulated network-security investigation involving suspicious HTTP traffic identified through an intrusion detection alert.
+
+Using Elastic/Kibana Discover, I analyzed 1,482 HTTP events from a March 2022 dataset to identify unusual network activity and investigate a potential command-and-control (C2) communication channel.
+
+The investigation identified two HTTP requests associated with the source IP address `192.166.65.54`. Both requests targeted an external Pastebin resource and reported a `bitsadmin` user agent.
+
+The analysis focused on:
+
+- **Traffic baselining:** Examining HTTP event volume and identifying source-IP distributions.
+- **Suspicious HTTP activity:** Investigating `HEAD` and `GET` requests to an external Pastebin URL.
+- **Indicator investigation:** Reconstructing the requested resource and examining its externally accessible contents.
+- **C2 assessment:** Evaluating whether the observed traffic supported a command-and-control hypothesis or an alternative explanation.
+
+The objective was to correlate HTTP metadata, identify potential indicators of compromise, and distinguish suspicious network behavior from confirmed attacker outcomes.
+
+The available evidence supported suspicious remote-content retrieval activity in the context of the supplied IDS alert. It did not independently establish an active C2 session, successful payload execution, or malicious command delivery.
+
+## Investigation Scope
+
+The investigation used HTTP traffic records available through Elastic/Kibana Discover.
+
+The dataset contained **1,482 events** within the selected March 2022 investigation window.
+
+| Investigation Area | Activity Examined | Primary Evidence |
+| --- | --- | --- |
+| HTTP Traffic Baseline | Event volume and source-IP distribution | Kibana Discover |
+| Suspicious Source Investigation | HTTP requests associated with `192.166.65.54` | Filtered HTTP events |
+| Network Indicator Analysis | Destination IP, hostname, URI, methods, and user agent | HTTP request metadata |
+| External Resource Investigation | Pastebin resource associated with the suspicious requests | External resource screenshot |
+| C2 Hypothesis Assessment | Potential remote-content retrieval or C2-related behavior | Correlated HTTP metadata and alert context |
+
+### Investigation Objectives
+
+The investigation sought to answer the following questions:
+
+1. What HTTP activity was present in the available dataset?
+2. Which source IP addresses generated the observed requests?
+3. Did any source exhibit unusual traffic characteristics?
+4. What destination, URI, methods, and user agent were associated with the suspicious activity?
+5. Could the HTTP events be used to reconstruct the requested external resource?
+6. Did the evidence establish malicious communication, or only suspicious requests?
+7. What detection opportunities could be developed from the findings?
+
+## Evidence Sources and Analysis Methodology
+
+### Elastic/Kibana Discover
+
+Kibana Discover was used to search and filter the available HTTP event records.
+
+The investigation began by examining the overall event count and available fields before narrowing the analysis to specific source addresses.
+
+Relevant fields included:
+
+- Source IP address
+- Destination IP address and port
+- HTTP request method
+- HTTP hostname and URI
+- HTTP response status
+- HTTP user agent
+- Event timestamps
+
+These fields provided sufficient context to reconstruct the observed HTTP requests without requiring access to the original network packets.
+
+### HTTP Metadata Analysis
+
+The investigation examined request and response metadata to determine which resources were accessed and how the HTTP client identified itself.
+
+The observed `bitsadmin` user agent was an important indicator because it suggested activity involving a Windows background-transfer mechanism.
+
+However, user-agent strings are client-supplied values. The HTTP metadata alone did not prove that `bitsadmin.exe` executed on the source endpoint.
+
+Similarly, an HTTP `200 OK` response indicates successful server handling of the request, but does not independently establish that the response content was saved or executed.
+
+### External Indicator Investigation
+
+The hostname and URI recovered from the HTTP events were used to reconstruct the external resource URL.
+
+The resource was examined separately to determine what information was displayed.
+
+The external page provided investigative context but was not treated as proof that the original HTTP client received, saved, or executed the same content.
+
+### Investigation Methodology
+
+| Step | Analyst Activity |
+| --- | --- |
+| Establish Baseline | Review HTTP event volume and source distributions |
+| Identify Anomaly | Select unusual sources for deeper investigation |
+| Filter | Narrow events using source-IP and HTTP fields |
+| Correlate | Compare methods, destinations, URIs, timestamps, and user agents |
+| Investigate IOC | Reconstruct and examine the external resource |
+| Assess | Evaluate the C2 hypothesis and evidence limitations |
+| Recommend | Identify practical detection and monitoring opportunities |
+
+### Evidence Standards
+
+The analysis distinguished observed network events from inferred attacker objectives.
+
+- Low-volume traffic alone does not establish malicious intent.
+- An HTTP user-agent string does not independently identify the executable responsible for a request.
+- A successful HTTP response does not prove that content was saved or executed.
+- Access to an external Pastebin resource does not independently confirm command-and-control activity.
+- Without endpoint telemetry or response-body evidence, the complete purpose and outcome of the requests remain uncertain.
+
+The investigation therefore classified the activity as suspicious and consistent with possible C2-related retrieval, rather than confirmed command-and-control execution.
+
+## Investigation Organization
+
+The report follows the investigative workflow:
+
+1. **HTTP Traffic Baseline:** Establishing the event count and identifying unusual sources.
+2. **Suspicious HTTP Requests:** Investigating the low-volume source and its Pastebin activity.
+3. **External IOC Investigation:** Reconstructing and examining the requested resource.
+4. **Detection and Defensive Analysis:** Identifying monitoring opportunities and mapping relevant ATT&CK techniques.
+
+The final sections document evidence limitations, investigation outcomes, and skills demonstrated.
